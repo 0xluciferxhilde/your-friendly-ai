@@ -208,10 +208,6 @@ const PoolPage = () => {
       animate={{ opacity: 1, scale: 1 }} 
       className="flex flex-col items-center justify-center min-h-[80vh] px-4 w-full py-12"
     >
-      <div className="flex flex-wrap justify-center gap-2 mb-6">
-        <EcosystemStatPill value={`${formatStat(eco?.swap.txns)} Swaps`} label="Total Swaps" />
-        <EcosystemStatPill value={`${eco?.swap.pairs ?? '...'} Pairs`} label="Liquidity Pairs" />
-      </div>
       <SwapCard mode="pool" className="brand-glow-hover transition-all duration-500" />
       
       {!isConnected && (

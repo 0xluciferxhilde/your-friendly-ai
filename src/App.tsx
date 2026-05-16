@@ -3586,7 +3586,7 @@ const MathSlashPage = ({ onBack }: { onBack: () => void }) => {
           <div className="order-2 lg:order-1 p-5 rounded-2xl font-mono bg-brand-surface border border-brand-border">
             <div className="flex items-center justify-between mb-4">
               <div className="text-[11px] uppercase text-brand-text-muted">Your Stats</div>
-              <span className="text-[9px] uppercase px-2 py-0.5 rounded-full text-brand-bg bg-brand-text-primary">Free to Play</span>
+              <span className="text-[9px] uppercase px-2 py-0.5 rounded-full text-black bg-green-500 font-bold">Free to Play</span>
             </div>
             {!isConnected ? (
               <div className="text-brand-text-muted text-xs">Connect wallet to track your stats</div>

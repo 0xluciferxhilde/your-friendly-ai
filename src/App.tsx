@@ -1095,7 +1095,7 @@ const NFTsPage = () => {
       <div className="mb-10">
         <h1 className="text-3xl md:text-4xl font-bold tracking-tighter mb-2">LitDeX NFTs</h1>
         <p className="text-brand-text-muted text-sm max-w-xl">Mint LitDeX NFTs with your points and earn daily zkLTC, USDC and LDEX rewards.</p>
-        <NFTEcosystemStats />
+        
       </div>
 
       {/* Rewards are claimed per NFT type in the "Your NFTs" section below */}

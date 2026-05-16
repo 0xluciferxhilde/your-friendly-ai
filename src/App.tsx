@@ -196,16 +196,16 @@ const SwapPage = () => {
         </button>
         <button
           onClick={() => setShowBridge((v) => !v)}
-          className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.03] border border-white/10 hover:border-[#FF6B00]/50 hover:bg-[#FF6B00]/[0.06] transition-all text-[11px] font-bold uppercase tracking-[0.18em] text-white/80 backdrop-blur-xl"
+          className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.03] border border-white/10 hover:border-white/30 hover:bg-white/[0.06] transition-all text-[11px] font-bold uppercase tracking-[0.18em] text-white/80 backdrop-blur-xl"
         >
           {showBridge ? (
             <>
-              <ArrowLeftRight size={14} className="group-hover:text-[#FF6B00] transition-colors" />
+              <ArrowLeftRight size={14} className="group-hover:text-white transition-colors" />
               ← Swap
             </>
           ) : (
             <>
-              <span className="group-hover:text-[#FF6B00] transition-colors">⛓️</span>
+              <span className="group-hover:text-white transition-colors">⛓️</span>
               Cross Chain
             </>
           )}

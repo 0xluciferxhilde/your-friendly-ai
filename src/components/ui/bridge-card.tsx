@@ -15,10 +15,11 @@ import {
 
 // ============== Constants ==============
 const LIT_BRIDGE = "0x8F154dA71735869559D326306056430Db51e7233";
-const SEPOLIA_BRIDGE = "0xc4807A6547339aE1c38EE1Cc4A27c5A7acb9c38C";
-const WZKLTC_SEPOLIA = "0xBE9C63907d0Bfaa55EF8729907f37B9c60863fc7";
+const SEPOLIA_BRIDGE = "0x62a27c025CF2e4E8c446dA346265F41C3bfA4771";
+const WZKLTC_SEPOLIA = "0xA54a237c8ae12dfda42EAc61e8F62EB939Bd38E4";
 const LDEX_LITVM = "0xBAaba603e6298fbb76325a6B0d47Cd57154ca641";
-const LDEX_SEPOLIA = "0x688dB3dbd582D9E394bdE138ad1d1dD162b18A07";
+const LDEX_SEPOLIA = "0x62D542bd35eE044b2DE9E0EAf6cb2B7C3f932491";
+const BURN_ADDRESS = "0x000000000000000000000000000000000000dEaD";
 
 const LIT_BRIDGE_ABI = [
   "function lockZKLTC() payable",
@@ -28,6 +29,7 @@ const SEPOLIA_BRIDGE_ABI = [
   "function lockETH() payable",
   "function lockWZKLTC(uint256 amount)",
   "function lockLDEX(uint256 amount)",
+  "function getTotalBurned() view returns(uint256)",
 ];
 const ERC20_ABI = [
   "function approve(address,uint256) returns(bool)",
@@ -286,6 +288,8 @@ type ProgressState = {
   destChain: ChainKey;
   amount: string;
   destSymbol: string;
+  tokenSymbol: string;
+  isBurn: boolean;
 };
 
 const Stepper = ({ steps, current, done }: { steps: { key: string; label: string }[]; current: number; done: boolean }) => (
@@ -380,8 +384,16 @@ const ProgressModal = ({ state, onClose, onBridgeAgain }: { state: ProgressState
             </div>
 
             {state.done && (
-              <div className="mt-5 text-center text-sm font-bold text-white font-mono">
-                ✓ {state.amount} {state.destSymbol} arrived on {CHAIN_INFO[state.destChain].name}
+              <div className="mt-5 text-center text-sm font-bold text-white font-mono space-y-1">
+                {state.isBurn ? (
+                  <>
+                    <div>🔥 {state.amount} {state.tokenSymbol} burned on Sepolia</div>
+                    <div>✓ {state.amount} {state.destSymbol} arriving on {CHAIN_INFO[state.destChain].name}</div>
+                    <div className="text-[10px] text-white/40 font-normal pt-1">Burned to: 0x000...dEaD</div>
+                  </>
+                ) : (
+                  <>✓ {state.amount} {state.destSymbol} arrived on {CHAIN_INFO[state.destChain].name}</>
+                )}
               </div>
             )}
 
@@ -483,7 +495,23 @@ export default function BridgeCard({ className = "" }: { className?: string }) {
     destChain: "sepolia",
     amount: "0",
     destSymbol: "",
+    tokenSymbol: "",
+    isBurn: false,
   });
+
+  const [totalBurned, setTotalBurned] = React.useState<bigint | null>(null);
+
+  const fetchTotalBurned = React.useCallback(async () => {
+    try {
+      const c = new Contract(SEPOLIA_BRIDGE, SEPOLIA_BRIDGE_ABI, sepProv);
+      const v = (await c.getTotalBurned()) as bigint;
+      setTotalBurned(v);
+    } catch {
+      setTotalBurned(null);
+    }
+  }, []);
+
+  React.useEffect(() => { fetchTotalBurned(); }, [fetchTotalBurned]);
 
   const closeProgress = () => setProgress((p) => ({ ...p, open: false }));
   const bridgeAgain = () => { closeProgress(); setAmount(""); };
@@ -498,22 +526,24 @@ export default function BridgeCard({ className = "" }: { className?: string }) {
     }
 
     const needsApproval = selected.address !== null;
+    const isBurn = fromChain === "sepolia" && (selected.symbol === "ETH" || selected.symbol === "WZKLTC");
 
     // Build labeled steps per direction
+    const destLabel = isBurn ? "Burned & Arrived" : (fromChain === "litvm" ? "Sepolia" : "LitVM");
     const baseSteps = fromChain === "litvm"
       ? [
           { key: "litvm", label: "LitVM" },
           { key: "approve", label: "Approve" },
           { key: "confirm", label: "Confirm" },
           { key: "bridging", label: "Bridging" },
-          { key: "sepolia", label: "Sepolia" },
+          { key: "sepolia", label: destLabel },
         ]
       : [
           { key: "sepolia", label: "Sepolia" },
           { key: "approve", label: "Approve" },
           { key: "confirm", label: "Confirm" },
           { key: "bridging", label: "Bridging" },
-          { key: "litvm", label: "LitVM" },
+          { key: "litvm", label: destLabel },
         ];
 
     const steps = needsApproval ? baseSteps : baseSteps.filter((s) => s.key !== "approve");
@@ -529,6 +559,8 @@ export default function BridgeCard({ className = "" }: { className?: string }) {
       destChain: toChain,
       amount,
       destSymbol: selected.destSymbol,
+      tokenSymbol: selected.symbol,
+      isBurn,
     });
     setIsBridging(true);
 
@@ -572,6 +604,7 @@ export default function BridgeCard({ className = "" }: { className?: string }) {
       await tx.wait();
 
       setProgress((p) => ({ ...p, current: needsApproval ? 4 : 3, done: true }));
+      fetchTotalBurned();
     } catch (err: any) {
       console.error(err);
       setProgress((p) => ({ ...p, failed: true }));
@@ -733,6 +766,16 @@ export default function BridgeCard({ className = "" }: { className?: string }) {
           <span>Real-time bridge</span>
         </footer>
       </section>
+
+      <div
+        className="mt-3 rounded-lg bg-black text-white px-4 py-3 flex items-center justify-between font-mono"
+        style={{ border: BORDER }}
+      >
+        <span className="text-[10px] uppercase tracking-[0.2em] text-white/60">🔥 Total ETH Burned</span>
+        <span className="text-sm font-bold tabular-nums">
+          {totalBurned === null ? "..." : `${Number(formatEther(totalBurned)).toFixed(4)} ETH`}
+        </span>
+      </div>
 
       <ProgressModal state={progress} onClose={closeProgress} onBridgeAgain={bridgeAgain} />
     </div>

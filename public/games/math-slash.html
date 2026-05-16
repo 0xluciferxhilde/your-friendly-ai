@@ -1499,11 +1499,13 @@
 
   function endGame() {
     setGameState('gameover');
-    if (score > bestScore) {
-      bestScore = score;
+    // Capture final score so async UI cannot read a reset value
+    const finalScore = score;
+    if (finalScore > bestScore) {
+      bestScore = finalScore;
       localStorage.setItem('mathslash_best', bestScore.toString());
     }
-    goScore.textContent = `Score: ${score}`;
+    goScore.textContent = `Score: ${finalScore}`;
     goStats.textContent = `Correct: ${totalCorrect}  |  Wrong: ${totalWrong}`;
     goLevel.textContent = `Reached Level ${currentLevel+1} — ${LEVELS[currentLevel].name}`;
     goBest.textContent = `Best: ${bestScore}`;
@@ -1512,24 +1514,20 @@
     const litdexHud = document.getElementById('litdex-hud');
     if (litdexHud) litdexHud.style.opacity = '0';
 
-    goScreen.classList.remove('hidden');
+    // Hide the in-game gameover screen — React parent owns the game-over UI now.
+    goScreen.classList.add('hidden');
 
-    // Call LitDeX /end endpoint
-    LitDeX.endSession(score);
-
-    // Tap-guard: prevent stray finger from gameplay auto-triggering
-    // PLAY AGAIN / EXIT when the screen pops up. Buttons are inert for
-    // 600ms after the game-over screen appears.
+    // Tell the React parent. Send BOTH event names for compatibility.
     isSlicing = false;
-    const _restart = document.getElementById('restart-btn');
-    const _exit    = document.getElementById('exit-btn');
-    if (_restart) { _restart.style.pointerEvents = 'none'; _restart.style.opacity = '0.5'; }
-    if (_exit)    { _exit.style.pointerEvents    = 'none'; _exit.style.opacity    = '0.5'; }
-    setTimeout(() => {
-      if (gameState !== 'gameover') return;
-      if (_restart) { _restart.style.pointerEvents = 'auto'; _restart.style.opacity = '1'; _restart.textContent = 'PLAY AGAIN'; }
-      if (_exit)    { _exit.style.pointerEvents    = 'auto'; _exit.style.opacity    = '1'; }
-    }, 600);
+    try {
+      window.parent && window.parent.postMessage({ type: 'GAME_OVER', score: finalScore }, '*');
+      window.parent && window.parent.postMessage({ type: 'litdex:mathslash:end', score: finalScore }, '*');
+    } catch (_) {}
+    // Note: do NOT call LitDeX.endSession here — the React parent calls /simple/end.
+    // Clear local session marker so beginActualGame() requires a fresh /simple/start.
+    if (window.LitDeX && typeof window.LitDeX.clearSession === 'function') {
+      try { window.LitDeX.clearSession(); } catch (_) {}
+    }
   }
 
   // ═════════════════════════════════════════════════════

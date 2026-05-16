@@ -3592,83 +3592,108 @@ const WeeklyLeaderboard = ({ className = '' }: { className?: string }) => {
 
 const MathSlashPage = ({ onBack }: { onBack: () => void }) => {
   const { address, isConnected } = useAccount();
+  const SIMPLE_API = 'https://game.test-hub.xyz';
+  const DAILY_LIMIT = 15;
+  const RATE = 0.0000923;
+
   const [stats, setStats] = useState<any>(null);
-  const [user, setUser] = useState<any>(null);
-  const [board, setBoard] = useState<any>(null);
-  const [convertStats, setConvertStats] = useState<any>(null);
-  const [convertStatsBump, setConvertStatsBump] = useState(0);
-  const [convertOpen, setConvertOpen] = useState(false);
+  const [board, setBoard] = useState<any[]>([]);
+  const [global, setGlobal] = useState<any>(null);
   const [playing, setPlaying] = useState(false);
-  const [nowTick, setNowTick] = useState(0);
-  useEffect(() => { const t = setInterval(() => setNowTick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
+  const [starting, setStarting] = useState(false);
+  const [result, setResult] = useState<{ score: number; zkltcSent: string; explorerUrl?: string; txHash?: string } | null>(null);
+  const [errMsg, setErrMsg] = useState('');
 
   const lowerAddr = address ? address.toLowerCase() : '';
+  const mask = (a: string) => a ? `${a.slice(0, 6)}...${a.slice(-4)}` : '';
 
   const fetchStats = async () => {
     if (!lowerAddr) return;
     try {
-      const r = await fetch(`${MATHSLASH_API}/game/mathslash/stats/${lowerAddr}`);
+      const r = await fetch(`${SIMPLE_API}/simple/stats/${lowerAddr}`);
       if (r.ok) setStats(await r.json());
-    } catch { /* ignore */ }
-    try {
-      const r2 = await fetch(`${MATHSLASH_API}/user/${lowerAddr}`);
-      if (r2.ok) setUser(await r2.json());
-    } catch { /* ignore */ }
-    try {
-      const r3 = await fetch(`${MATHSLASH_API}/convert/stats/${lowerAddr}`);
-      if (r3.ok) setConvertStats(await r3.json());
-    } catch { /* ignore */ }
+    } catch {}
   };
   const fetchBoard = async () => {
     try {
-      const r = await fetch(`${MATHSLASH_API}/game/mathslash/weekly-leaderboard`);
-      if (r.ok) setBoard(await r.json());
-    } catch { /* ignore */ }
+      const r = await fetch(`${SIMPLE_API}/simple/leaderboard`);
+      if (r.ok) {
+        const d = await r.json();
+        setBoard(Array.isArray(d) ? d : (d?.leaderboard || []));
+      }
+    } catch {}
+  };
+  const fetchGlobal = async () => {
+    try {
+      const r = await fetch(`${SIMPLE_API}/simple/global`);
+      if (r.ok) setGlobal(await r.json());
+    } catch {}
   };
 
-  useEffect(() => { if (isConnected) fetchStats(); const t = setInterval(() => { if (isConnected) fetchStats(); }, 15000); return () => clearInterval(t); }, [isConnected, lowerAddr]);
   useEffect(() => {
     fetchBoard();
-    const t = setInterval(fetchBoard, 60000);
+    fetchGlobal();
+    const t = setInterval(() => { fetchBoard(); fetchGlobal(); }, 60000);
     return () => clearInterval(t);
   }, []);
-
-  // Listen for game-end postMessage from the math-slash iframe and emit notifications
   useEffect(() => {
     if (!lowerAddr) return;
-    const onMsg = (e: MessageEvent) => {
+    fetchStats();
+    const t = setInterval(fetchStats, 20000);
+    return () => clearInterval(t);
+  }, [lowerAddr]);
+
+  // Listen for score from iframe and submit /simple/end
+  useEffect(() => {
+    if (!lowerAddr) return;
+    const onMsg = async (e: MessageEvent) => {
       const d: any = e?.data;
       if (!d) return;
       if (d.type === 'litdex:mathslash:exit') {
         setPlaying(false);
-        try { fetchStats(); } catch {}
         try { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); } catch {}
         try { (screen.orientation as any)?.unlock?.(); } catch {}
+        fetchStats();
         return;
       }
       if (d.type !== 'litdex:mathslash:end') return;
       const score = Number(d.score) || 0;
-      const pts = Number(d.pointsEarned) || 0;
       try {
-        addNotif(lowerAddr, {
-          type: 'game',
-          title: 'Game Played',
-          message: `Scored ${score} pts · Earned ${pts} points`,
+        const r = await fetch(`${SIMPLE_API}/simple/end`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wallet: lowerAddr, score }),
         });
-        if (pts > 0) {
-          addNotif(lowerAddr, {
-            type: 'milestone',
-            title: 'Points Earned',
-            message: `+${pts} points from Math Slash`,
-          });
+        const data = await r.json().catch(() => ({}));
+        setPlaying(false);
+        try { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); } catch {}
+        try { (screen.orientation as any)?.unlock?.(); } catch {}
+        if (r.ok && data?.success !== false) {
+          const zkltcSent = String(data?.zkltcSent ?? (score * RATE).toFixed(8));
+          const explorerUrl = data?.explorerUrl || (data?.txHash ? `https://liteforge.explorer.caldera.xyz/tx/${data.txHash}` : undefined);
+          setResult({ score: Number(data?.score ?? score), zkltcSent, explorerUrl, txHash: data?.txHash });
+          try {
+            addNotif(lowerAddr, {
+              type: 'game',
+              title: 'Game Over',
+              message: `Scored ${score} · ${zkltcSent} zkLTC sent`,
+              link: explorerUrl,
+            });
+          } catch {}
+        } else {
+          setErrMsg(data?.error || data?.message || 'Failed to submit score');
         }
-      } catch {}
-      try { fetchStats(); } catch {}
+        fetchStats();
+        fetchBoard();
+        fetchGlobal();
+      } catch (err: any) {
+        setPlaying(false);
+        setErrMsg(err?.message || 'Network error submitting score');
+      }
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
   }, [lowerAddr]);
-
 
   useEffect(() => {
     if (playing) document.body.classList.add('hide-nav');
@@ -3676,245 +3701,228 @@ const MathSlashPage = ({ onBack }: { onBack: () => void }) => {
     return () => document.body.classList.remove('hide-nav');
   }, [playing]);
 
-  const mask = (a: string) => a ? `${a.slice(0, 6)}...${a.slice(-4)}` : '';
-  const tierNum = (stats?.nftTier ?? user?.nft_tier ?? 0) as number;
-  const tierLabel = TIER_NAMES[tierNum] || 'NONE';
-  const tier = tierLabel.toLowerCase();
-  const pointsToday = Math.max(0, Number(stats?.pointsEarnedToday ?? 0));
-  const totalPoints = Math.max(0, Number(stats?.totalPointsEarned ?? user?.total_points ?? 0));
-  const cu = convertStats?.user || convertStats || {};
-  const zkConvertedTotal = Number(cu.totalZkltcReceived ?? cu.zkltcReceivedTotal ?? 0);
-  const zkConvertedToday = (() => {
-    const apiToday = Number(cu.zkltcReceivedToday ?? cu.totalZkltcReceivedToday ?? cu.zkltcToday ?? 0);
-    if (apiToday > 0) return apiToday;
+  const gamesPlayed = Math.max(0, Number(stats?.gamesPlayed ?? 0));
+  const gamesLeft = Math.max(0, Number(stats?.gamesLeft ?? Math.max(0, DAILY_LIMIT - gamesPlayed)));
+  const totalZkltc = Number(stats?.totalZkltcEarned ?? 0);
+  const recent: any[] = Array.isArray(stats?.recentGames) ? stats.recentGames : [];
+
+  const startGame = async () => {
+    if (!lowerAddr || starting) return;
+    setErrMsg('');
+    setResult(null);
+    setStarting(true);
     try {
-      if (!lowerAddr) return 0;
-      const raw = localStorage.getItem(`mathslash_today_${lowerAddr}`);
-      if (!raw) return 0;
-      const { ts, zkltc } = JSON.parse(raw);
-      if (!ts || Date.now() - ts > 24 * 3600 * 1000) return 0;
-      return Number(zkltc) || 0;
-    } catch { return 0; }
-  })();
-  const MS_DAILY_LIMIT = 15;
-  const gamesPlayed = Number(stats?.gamesPlayed ?? stats?.gamesPlayedToday ?? stats?.gamesToday ?? 0);
-  const gamesLeft = Number(stats?.gamesLeft ?? Math.max(0, MS_DAILY_LIMIT - gamesPlayed));
-  const gamesToday = Math.min(gamesPlayed, MS_DAILY_LIMIT);
-  const freeGamesLeft = Number(stats?.freeGamesLeft ?? 0);
-  const isFree = freeGamesLeft > 0 || (stats?.isFree ?? (tierNum >= 3));
-  const gameCost = stats?.gameCost ?? 0;
-  const entries: any[] = board?.leaderboard || board?.entries || board?.players || [];
-  const week = board?.week || board?.currentWeek || '';
+      const r = await fetch(`${SIMPLE_API}/simple/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet: lowerAddr }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setErrMsg(data?.error || data?.message || `Failed to start (${r.status})`);
+        return;
+      }
+      setPlaying(true);
+      try {
+        const el: any = document.documentElement;
+        const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+        if (req) req.call(el).catch(() => {});
+      } catch {}
+      try { (screen.orientation as any)?.lock?.('landscape').catch(() => {}); } catch {}
+    } catch (e: any) {
+      setErrMsg(e?.message || 'Network error');
+    } finally {
+      setStarting(false);
+    }
+  };
 
-  // Time until next 00:00 IST (UTC+5:30)
-  const midnightIST = (() => {
-    void nowTick;
-    const now = new Date();
-    const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
-    const midnight = new Date(istNow);
-    midnight.setUTCHours(24, 0, 0, 0);
-    const diff = Math.max(0, midnight.getTime() - istNow.getTime());
-    const h = Math.floor(diff / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
-    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  })();
-
-  // 24h cooldown derived from convert stats
-  const lastConvertTs = (() => {
-    const v = cu.lastConvertAt ?? cu.lastConvertedAt ?? cu.lastConvert ?? convertStats?.lastConvertAt;
-    if (!v) return 0;
-    const t = typeof v === 'number' ? (v < 1e12 ? v * 1000 : v) : Date.parse(v);
-    return isNaN(t) ? 0 : t;
-  })();
-  const cooldownRemaining = (() => {
-    const explicit = Number(cu.cooldownRemaining ?? convertStats?.cooldownRemaining ?? 0);
-    if (explicit > 0) return Math.floor(explicit);
-    if (!lastConvertTs) return 0;
-    const diff = Math.floor((lastConvertTs + 24 * 3600 * 1000 - Date.now()) / 1000);
-    return diff > 0 ? diff : 0;
-  })();
+  const leaderboard = (
+    <div className="p-5 rounded-2xl font-mono bg-brand-surface border border-brand-border">
+      <div className="text-[11px] uppercase text-brand-text-primary mb-3">Weekly Leaderboard</div>
+      {board.length === 0 ? (
+        <div className="text-brand-text-muted text-xs">No games yet</div>
+      ) : (
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr className="text-brand-text-muted">
+              <th className="text-left font-normal">#</th>
+              <th className="text-left font-normal">Wallet</th>
+              <th className="text-right font-normal">Score</th>
+              <th className="text-right font-normal">zkLTC</th>
+            </tr>
+          </thead>
+          <tbody>
+            {board.slice(0, 10).map((e: any, i: number) => {
+              const w = e.wallet || e.walletAddress || e.address || '';
+              const cls = i === 0 ? 'text-brand-text-primary font-bold' : 'text-brand-text-muted';
+              return (
+                <tr key={i} className={cls}>
+                  <td className="py-1">{i + 1}</td>
+                  <td className="py-1">{mask(w)}</td>
+                  <td className="py-1 text-right">{Number(e.total_score ?? e.totalScore ?? e.score ?? 0)}</td>
+                  <td className="py-1 text-right">{Number(e.total_zkltc ?? e.totalZkltc ?? 0).toFixed(6)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="math-slash-page py-8 max-w-7xl mx-auto px-4">
       <button onClick={onBack} className="font-mono text-[11px] uppercase text-brand-text-muted hover:text-brand-text-primary mb-6">← Back to Games</button>
-      {!isConnected ? (
-        <div className="grid gap-5 grid-cols-1 lg:grid-cols-[1fr_320px]">
-          <div className="p-8 rounded-2xl text-center font-mono text-sm bg-brand-surface border border-brand-border text-brand-text-muted self-start">
-            Connect your wallet using the navbar button to play
-          </div>
-          <WeeklyLeaderboard />
-        </div>
-      ) : (
-         <div className={`grid gap-5 ${playing ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-[260px_1fr_280px]'}`}>
-          {/* Game */}
-          <div className={`order-1 lg:order-2 overflow-hidden ${playing ? 'fixed inset-0 z-[100000] bg-black rounded-none border-0' : 'game-canvas-wrap rounded-2xl'}`}>
-            {!playing ? (
-              <div className="p-6 sm:p-8 text-center">
-                <div className="font-mono text-brand-text-primary text-base sm:text-lg mb-2">MATH SLASH</div>
-                <div className="font-mono text-brand-text-muted text-xs mb-6">Slash the equations. Earn points, convert to zkLTC.</div>
-                <button type="button" onClick={() => {
-                  setPlaying(true);
-                  try {
-                    const el: any = document.documentElement;
-                    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
-                    if (req) req.call(el).catch(() => {});
-                  } catch {}
-                  try { (screen.orientation as any)?.lock?.('landscape').catch(() => {}); } catch {}
-                }} onTouchEnd={(e) => { e.preventDefault(); (e.currentTarget as HTMLButtonElement).click(); }} className="w-full sm:w-auto min-h-12 px-8 py-3 rounded-lg bg-brand-text-primary text-brand-bg font-mono font-bold text-sm cursor-pointer touch-manipulation select-none active:scale-[0.98]" style={{ WebkitTapHighlightColor: 'transparent' }}>START GAME</button>
-              </div>
+
+      <div className={`grid gap-5 ${playing ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-[260px_1fr_300px]'}`}>
+        {/* Stats (left) */}
+        {!playing && (
+          <div className="order-2 lg:order-1 p-5 rounded-2xl font-mono bg-brand-surface border border-brand-border">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-[11px] uppercase text-brand-text-muted">Your Stats</div>
+              <span className="text-[9px] uppercase px-2 py-0.5 rounded-full text-brand-bg bg-brand-text-primary">Free to Play</span>
+            </div>
+            {!isConnected ? (
+              <div className="text-brand-text-muted text-xs">Connect wallet to track your stats</div>
             ) : (
-              <div className="relative w-screen h-screen" style={{ width: '100vw', height: '100dvh' }}>
-                <button onClick={() => {
-                  setPlaying(false);
-                  fetchStats();
-                  try { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); } catch {}
-                  try { (screen.orientation as any)?.unlock?.(); } catch {}
-                }} className="font-mono text-[11px] uppercase bg-brand-surface-2 text-brand-text-primary border border-brand-border" style={{ position: 'fixed', top: 16, right: 16, zIndex: 999999, padding: '8px 14px', borderRadius: 8 }}>EXIT</button>
-                <iframe
-                  src={`/games/math-slash.html?wallet=${lowerAddr}`}
-                  title="Math Slash"
-                  style={{ border: 'none', position: 'absolute', inset: 0, width: '100%', height: '100%' }}
-                  allow="autoplay; fullscreen"
-                />
-              </div>
+              <>
+                <div className="mb-3">
+                  <div className="text-[10px] uppercase text-brand-text-muted">Games Today</div>
+                  <div className="text-brand-text-primary text-sm">{gamesPlayed} / {DAILY_LIMIT}</div>
+                </div>
+                <div className="mb-3">
+                  <div className="text-[10px] uppercase text-brand-text-muted">Total zkLTC Earned</div>
+                  <div className="text-brand-text-primary text-sm">{totalZkltc.toFixed(8)}</div>
+                </div>
+                <div className="mb-4">
+                  <div className="text-[10px] uppercase text-brand-text-muted">Rate</div>
+                  <div className="text-brand-text-primary text-xs">1 PT = {RATE} zkLTC</div>
+                </div>
+                <div className="pt-3 border-t border-brand-border">
+                  <div className="text-[10px] uppercase text-brand-text-muted mb-2">Recent Games</div>
+                  {recent.length === 0 ? (
+                    <div className="text-brand-text-muted text-[11px]">No games yet</div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {recent.slice(0, 5).map((g: any, i: number) => {
+                        const url = g.tx_hash ? `https://liteforge.explorer.caldera.xyz/tx/${g.tx_hash}` : undefined;
+                        return (
+                          <div key={i} className="flex items-center justify-between text-[10px]">
+                            <span className="text-brand-text-primary">{Number(g.score ?? 0)} pts</span>
+                            <span className="text-brand-text-muted">{Number(g.zkltc_sent ?? 0).toFixed(6)}</span>
+                            {url ? (
+                              <a href={url} target="_blank" rel="noreferrer" className="text-brand-text-primary underline decoration-white/30">tx</a>
+                            ) : <span className="text-brand-text-muted">—</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
+        )}
 
-          {/* Stats */}
-          <div className={`order-2 lg:order-1 p-5 rounded-2xl font-mono bg-brand-surface border border-brand-border ${playing ? 'hidden' : ''}`}>
-            <div className="text-[11px] uppercase text-brand-text-muted mb-4">Your Stats</div>
-            <div className="flex lg:block gap-3 overflow-x-auto lg:overflow-visible -mx-1 px-1 pb-2 lg:pb-0 snap-x">
-              <div className="mb-0 lg:mb-3 shrink-0 lg:shrink snap-start min-w-[120px] lg:min-w-0">
-                <div className="text-[10px] uppercase text-brand-text-muted mb-1">NFT Tier</div>
-                <span className="inline-block px-2.5 py-1 rounded-full text-[11px] uppercase text-brand-text-primary bg-brand-surface-2 border border-brand-border">{tierLabel}</span>
-              </div>
-              <div className="mb-0 lg:mb-3 shrink-0 lg:shrink snap-start min-w-[120px] lg:min-w-0">
-                <div className="text-[10px] uppercase text-brand-text-muted">Games Today</div>
-                <div className="text-brand-text-primary text-sm">{gamesToday} / {MS_DAILY_LIMIT}</div>
-                {freeGamesLeft > 0 && (
-                  <div className="font-mono text-[10px] mt-0.5" style={{ color: '#1D9E75' }}>🎮 {freeGamesLeft} free games left</div>
-                )}
-              </div>
-              {gamesLeft <= 0 ? (
-                <div className="daily-limit-card mb-0 lg:mb-3 shrink-0 lg:shrink snap-start min-w-[160px] lg:min-w-0 p-3 rounded-lg" style={{ background: '#0a0a0a', border: '1px solid #1f1f1f' }}>
-                  <div className="text-[10px] uppercase font-mono" style={{ color: '#555' }}>Daily Limit Reached</div>
-                  <div className="text-white font-mono text-sm mt-0.5">Resets in {midnightIST}</div>
-                  <div className="font-mono mt-0.5" style={{ color: '#333', fontSize: 9 }}>Resets at 00:00 IST</div>
-                </div>
-              ) : (
-                <div className="mb-0 lg:mb-3 shrink-0 lg:shrink snap-start min-w-[120px] lg:min-w-0">
-                  <div className="text-[10px] uppercase text-brand-text-muted">Games Remaining</div>
-                  <div className="text-brand-text-primary text-sm">{gamesLeft}</div>
-                </div>
+        {/* Game (center) */}
+        <div className={`order-1 lg:order-2 overflow-hidden ${playing ? 'fixed inset-0 z-[100000] bg-black rounded-none border-0' : 'game-canvas-wrap rounded-2xl'}`}>
+          {!playing ? (
+            <div className="p-6 sm:p-8 text-center">
+              <div className="font-mono text-brand-text-primary text-base sm:text-lg mb-2">MATH SLASH</div>
+              <div className="font-mono text-brand-text-muted text-xs mb-2">Slash the equations. zkLTC auto-sent after each game.</div>
+              <div className="font-mono text-[10px] text-brand-text-muted mb-6">{DAILY_LIMIT} games/day · resets 00:00 IST</div>
+              <button
+                type="button"
+                onClick={startGame}
+                onTouchEnd={(e) => { e.preventDefault(); (e.currentTarget as HTMLButtonElement).click(); }}
+                disabled={!isConnected || starting || (isConnected && gamesLeft <= 0)}
+                className="w-full sm:w-auto min-h-12 px-8 py-3 rounded-lg bg-brand-text-primary text-brand-bg font-mono font-bold text-sm cursor-pointer touch-manipulation select-none active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
+              >
+                {!isConnected ? 'CONNECT WALLET' : starting ? 'STARTING…' : gamesLeft <= 0 ? 'DAILY LIMIT REACHED' : 'START GAME'}
+              </button>
+              {errMsg && (
+                <div className="mt-4 font-mono text-[11px]" style={{ color: '#c44' }}>{errMsg}</div>
               )}
-              <div className="mb-0 lg:mb-3 shrink-0 lg:shrink snap-start min-w-[120px] lg:min-w-0">
-                <div className="text-[10px] uppercase text-brand-text-muted">Game Cost</div>
-                <div className="text-brand-text-primary text-sm">{isFree ? 'FREE' : `${gameCost} PTS`}</div>
-                <div className="text-[9px] mt-0.5 text-brand-text-muted" style={{ fontStyle: 'italic' }}>(pts from points section)</div>
-              </div>
-              <div className="mb-0 lg:mb-3 shrink-0 lg:shrink snap-start min-w-[120px] lg:min-w-0">
-                <div className="text-[10px] uppercase text-brand-text-muted">In-Game Points Today</div>
-                <div className="text-brand-text-primary text-sm">{pointsToday}</div>
-              </div>
-              {(() => {
-                const cdActive = cooldownRemaining > 0;
-                const fmtCd = (s: number) => {
-                  const h = String(Math.floor(s / 3600)).padStart(2, '0');
-                  const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
-                  const sec = String(s % 60).padStart(2, '0');
-                  return `${h}:${m}:${sec}`;
-                };
-                return (
-                  <button
-                    onClick={() => { if (!cdActive && totalPoints > 0) setConvertOpen(true); }}
-                    disabled={totalPoints <= 0 || cdActive}
-                    className="text-left mb-0 lg:mb-3 shrink-0 lg:shrink lg:w-full snap-start min-w-[160px] lg:min-w-0 disabled:cursor-default"
-                  >
-                    <div className="text-[10px] uppercase text-brand-text-muted">In-Game Total Points</div>
-                    <div className="text-brand-text-primary text-2xl font-bold">{totalPoints}</div>
-                    {cdActive ? (
-                      <div className="text-[10px] mt-1 font-mono" style={{ color: '#555' }}>Next convert in {fmtCd(cooldownRemaining)}</div>
-                    ) : (totalPoints > 0 && (
-                      <div className="text-[10px] mt-1" style={{ color: '#333' }}>tap to convert → zkLTC</div>
-                    ))}
-                  </button>
-                );
-              })()}
-              <div className="mb-0 lg:mb-3 shrink-0 lg:shrink snap-start min-w-[160px] lg:min-w-0">
-                <div className="text-[10px] uppercase text-brand-text-muted">zkLTC Converted Today</div>
-                <div className="text-brand-text-primary text-sm">{zkConvertedToday.toFixed(7)}</div>
-              </div>
-              <div className="mb-0 lg:mb-1 shrink-0 lg:shrink snap-start min-w-[160px] lg:min-w-0">
-                <div className="text-[10px] uppercase text-brand-text-muted">Total zkLTC Converted</div>
-                <div className="text-brand-text-primary text-sm">{zkConvertedTotal.toFixed(7)}</div>
-              </div>
             </div>
-          </div>
-
-          {/* Leaderboard */}
-          <div className={`p-5 rounded-2xl font-mono bg-brand-surface border border-brand-border ${playing ? 'hidden' : ''}`}>
-            <div className="text-[11px] uppercase text-brand-text-primary mb-1">Weekly Leaderboard</div>
-            {week && <div className="text-[10px] text-brand-text-muted mb-3">Week: {week}</div>}
-            {entries.length === 0 ? (
-              <div className="text-brand-text-muted text-xs">No games this week yet</div>
-            ) : (
-              <table className="w-full text-[11px]">
-                <thead>
-                  <tr className="text-brand-text-muted"><th className="text-left font-normal">#</th><th className="text-left font-normal">Wallet</th><th className="text-right font-normal">Score</th></tr>
-                </thead>
-                <tbody>
-                  {entries.slice(0, 20).map((e: any, i: number) => {
-                    const c = i === 0 ? 'text-brand-text-primary font-bold' : 'text-brand-text-muted';
-                    const w = e.wallet || e.walletAddress || e.address || '';
-                    const displayWallet = w.includes('...') ? w : mask(w);
-                    return (
-                      <tr key={i} className={c}>
-                        <td className="py-1">{i + 1}</td>
-                        <td className="py-1">{displayWallet}</td>
-                        <td className="py-1 text-right">{e.totalScore ?? e.score ?? e.points ?? 0}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-            <div className="mt-4 pt-3 border-t border-brand-border text-[10px] text-brand-text-muted space-y-0.5">
-              <div>Rank 1: 1 zkLTC + 2,000 pts</div>
-              <div>Rank 2: 0.5 zkLTC + 1,000 pts</div>
-              <div>Rank 3: 0.3 zkLTC + 500 pts</div>
-              <div>Rank 4-10: 0.01 zkLTC + 200 pts</div>
-              <div>Rank 11-20: 0.001 zkLTC + 100 pts</div>
-              <div className="pt-2 opacity-70">Top 20 rewarded every Sunday midnight IST</div>
+          ) : (
+            <div className="relative w-screen h-screen" style={{ width: '100vw', height: '100dvh' }}>
+              <button onClick={() => {
+                setPlaying(false);
+                fetchStats();
+                try { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); } catch {}
+                try { (screen.orientation as any)?.unlock?.(); } catch {}
+              }} className="font-mono text-[11px] uppercase bg-brand-surface-2 text-brand-text-primary border border-brand-border" style={{ position: 'fixed', top: 16, right: 16, zIndex: 999999, padding: '8px 14px', borderRadius: 8 }}>EXIT</button>
+              <iframe
+                src={`/games/math-slash.html?wallet=${lowerAddr}`}
+                title="Math Slash"
+                style={{ border: 'none', position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+                allow="autoplay; fullscreen"
+              />
             </div>
-          </div>
+          )}
+        </div>
 
-          <GlobalConvertStats reloadKey={convertStatsBump} />
+        {/* Leaderboard (right) */}
+        {!playing && <div className="order-3">{leaderboard}</div>}
+      </div>
+
+      {/* Global stats bottom bar */}
+      {!playing && (
+        <div className="mt-6 p-5 rounded-2xl font-mono bg-brand-surface border border-brand-border grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div>
+            <div className="text-[10px] uppercase text-brand-text-muted">Total Games</div>
+            <div className="text-brand-text-primary text-lg font-bold">{Number(global?.totalGames ?? 0).toLocaleString()}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase text-brand-text-muted">Total Players</div>
+            <div className="text-brand-text-primary text-lg font-bold">{Number(global?.uniquePlayers ?? 0).toLocaleString()}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase text-brand-text-muted">Total Score</div>
+            <div className="text-brand-text-primary text-lg font-bold">{Number(global?.totalScore ?? 0).toLocaleString()}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase text-brand-text-muted">zkLTC Distributed</div>
+            <div className="text-brand-text-primary text-lg font-bold">{Number(global?.totalZkltc ?? 0).toFixed(6)}</div>
+          </div>
         </div>
       )}
-      <ConvertPopup
-        open={convertOpen}
-        onClose={() => setConvertOpen(false)}
-        address={lowerAddr}
-        tier={convertStats?.tier ?? convertStats?.user?.tier ?? tier}
-        apiRate={Number(convertStats?.rate ?? convertStats?.user?.rate)}
-        points={totalPoints}
-        initialCooldown={cooldownRemaining}
-        onConverted={(info: any) => {
-          fetchStats();
-          setConvertStatsBump((k) => k + 1);
-          try {
-            if (lowerAddr && info) {
-              addNotif(lowerAddr, {
-                type: 'convert',
-                title: 'zkLTC Received',
-                message: `Converted ${info.pts} pts → ${info.zkltc} zkLTC`,
-                link: info.explorerUrl,
-              });
-            }
-          } catch {}
-        }}
-      />
+
+      {/* Result popup */}
+      {result && (
+        <div className="fixed inset-0 z-[100001] flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.85)' }} onClick={() => setResult(null)}>
+          <div className="w-full max-w-md p-6 rounded-2xl font-mono bg-brand-surface border border-brand-border" onClick={(e) => e.stopPropagation()}>
+            <div className="text-brand-text-primary text-lg mb-1">🎮 Game Over!</div>
+            <div className="text-brand-text-muted text-xs mb-4">Score submitted · zkLTC auto-sent</div>
+            <div className="space-y-2 mb-4">
+              <div className="flex justify-between text-xs">
+                <span className="text-brand-text-muted uppercase">Score</span>
+                <span className="text-brand-text-primary font-bold">{result.score}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-brand-text-muted uppercase">zkLTC Sent</span>
+                <span className="text-brand-text-primary font-bold">💰 {result.zkltcSent}</span>
+              </div>
+            </div>
+            {result.explorerUrl && (
+              <a href={result.explorerUrl} target="_blank" rel="noreferrer" className="block text-center text-[11px] text-brand-text-primary underline decoration-white/30 mb-3">
+                View Transaction →
+              </a>
+            )}
+            <button
+              onClick={() => { setResult(null); startGame(); }}
+              disabled={!isConnected || gamesLeft <= 0 || starting}
+              className="w-full py-3 rounded-lg bg-brand-text-primary text-brand-bg font-mono font-bold text-sm disabled:opacity-50"
+            >
+              {gamesLeft <= 0 ? 'DAILY LIMIT REACHED' : 'PLAY AGAIN'}
+            </button>
+            <button onClick={() => setResult(null)} className="w-full mt-2 py-2 rounded-lg font-mono text-[11px] uppercase text-brand-text-muted hover:text-brand-text-primary">
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 };

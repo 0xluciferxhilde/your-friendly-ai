@@ -767,6 +767,16 @@ export default function BridgeCard({ className = "" }: { className?: string }) {
         </footer>
       </section>
 
+      <div
+        className="mt-3 rounded-lg bg-black text-white px-4 py-3 flex items-center justify-between font-mono"
+        style={{ border: BORDER }}
+      >
+        <span className="text-[10px] uppercase tracking-[0.2em] text-white/60">🔥 Total ETH Burned</span>
+        <span className="text-sm font-bold tabular-nums">
+          {totalBurned === null ? "..." : `${Number(formatEther(totalBurned)).toFixed(4)} ETH`}
+        </span>
+      </div>
+
       <ProgressModal state={progress} onClose={closeProgress} onBridgeAgain={bridgeAgain} />
     </div>
   );

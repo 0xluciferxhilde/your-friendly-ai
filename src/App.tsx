@@ -3714,19 +3714,21 @@ const MathSlashPage = ({ onBack }: { onBack: () => void }) => {
             </div>
           ) : (
             <div className="relative w-screen h-screen" style={{ width: '100vw', height: '100dvh' }}>
-              <button onClick={handleExitGame} className="font-mono text-[11px] uppercase bg-brand-surface-2 text-brand-text-primary border border-brand-border" style={{ position: 'fixed', top: 16, right: 16, zIndex: 999999, padding: '8px 14px', borderRadius: 8 }}>EXIT</button>
+              {!gameOver && (
+                <button onClick={handleExitGame} className="font-mono text-[11px] uppercase bg-brand-surface-2 text-brand-text-primary border border-brand-border" style={{ position: 'fixed', top: 16, right: 16, zIndex: 999999, padding: '8px 14px', borderRadius: 8 }}>EXIT</button>
+              )}
               <iframe
                 key={iframeKey}
-                src={`/games/math-slash.html?wallet=${lowerAddr}`}
+                src={`/games/math-slash.html?wallet=${lowerAddr}${autoStart ? '&autostart=1' : ''}`}
                 title="Math Slash"
                 style={{ border: 'none', position: 'absolute', inset: 0, width: '100%', height: '100%' }}
                 allow="autoplay; fullscreen"
               />
 
               {/* React-owned GAME OVER overlay (covers the iframe's own one) */}
-              {(gameOverPending || result || (gameOverScore !== null && errMsg)) && (
+              {gameOver && (
                 <div style={{
-                  position: 'fixed', inset: 0, zIndex: 999998,
+                  position: 'fixed', inset: 0, zIndex: 1000001,
                   background: 'rgba(0,0,0,0.92)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   padding: 16,
@@ -3738,52 +3740,47 @@ const MathSlashPage = ({ onBack }: { onBack: () => void }) => {
                   }}>
                     <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 12 }}>🎮 GAME OVER</div>
                     <div style={{ fontSize: 12, textTransform: 'uppercase', color: '#666', letterSpacing: '0.1em' }}>Score</div>
-                    <div style={{ fontSize: 32, fontWeight: 700, marginBottom: 18 }}>{gameOverScore ?? 0}</div>
+                    <div style={{ fontSize: 32, fontWeight: 700, marginBottom: 18 }}>{gameOver.score}</div>
 
-                    {gameOverPending && (
-                      <div style={{ marginBottom: 20 }}>
-                        <div style={{ fontSize: 14, color: '#999' }}>💰 Converting…</div>
-                      </div>
+                    <div style={{ display: 'grid', gap: 10, marginBottom: 18, textAlign: 'left' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><span style={{ color: '#777', textTransform: 'uppercase' }}>Correct / Wrong</span><span>{gameOver.correct} / {gameOver.wrong}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><span style={{ color: '#777', textTransform: 'uppercase' }}>Level reached</span><span>{gameOver.levelName ? `${gameOver.level} — ${gameOver.levelName}` : gameOver.level}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><span style={{ color: '#777', textTransform: 'uppercase' }}>Best score</span><span>{gameOver.best}</span></div>
+                    </div>
+
+                    {sentNotice && (
+                      <div style={{ marginBottom: 16, fontSize: 13, color: '#fff' }}>{sentNotice}</div>
                     )}
 
-                    {result && !gameOverPending && (
-                      <div style={{ marginBottom: 20 }}>
-                        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>💰 {result.zkltcSent} zkLTC sent!</div>
-                        {result.explorerUrl && (
-                          <a href={result.explorerUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#9ad4ff', textDecoration: 'underline' }}>View TX →</a>
-                        )}
-                      </div>
-                    )}
-
-                    {errMsg && !gameOverPending && !result && (
+                    {errMsg && (
                       <div style={{ marginBottom: 20, fontSize: 12, color: '#c44' }}>{errMsg}</div>
                     )}
 
                     <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
                       <button
                         onClick={handlePlayAgain}
-                        disabled={gameOverPending}
+                        disabled={endingGame}
                         style={{
                           flex: 1, minHeight: 48, borderRadius: 10,
                           background: '#fff', color: '#000', border: 'none',
                           fontSize: 12, fontWeight: 700, letterSpacing: '0.1em',
-                          textTransform: 'uppercase', cursor: gameOverPending ? 'not-allowed' : 'pointer',
-                          opacity: gameOverPending ? 0.5 : 1,
+                          textTransform: 'uppercase', cursor: endingGame ? 'not-allowed' : 'pointer',
+                          opacity: endingGame ? 0.5 : 1,
                           WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
                         }}
-                      >Play Again</button>
+                      >PLAY AGAIN</button>
                       <button
-                        onClick={handleExitGame}
-                        disabled={gameOverPending}
+                        onClick={handleGameOverExit}
+                        disabled={endingGame}
                         style={{
                           flex: 1, minHeight: 48, borderRadius: 10,
                           background: 'transparent', color: '#fff', border: '1px solid #333',
                           fontSize: 12, fontWeight: 700, letterSpacing: '0.1em',
-                          textTransform: 'uppercase', cursor: gameOverPending ? 'not-allowed' : 'pointer',
-                          opacity: gameOverPending ? 0.5 : 1,
+                          textTransform: 'uppercase', cursor: endingGame ? 'not-allowed' : 'pointer',
+                          opacity: endingGame ? 0.5 : 1,
                           WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
                         }}
-                      >Exit</button>
+                      >EXIT</button>
                     </div>
                   </div>
                 </div>

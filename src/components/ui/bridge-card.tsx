@@ -537,6 +537,27 @@ export default function BridgeCard({ className = "" }: { className?: string }) {
 
   React.useEffect(() => { fetchTotalBurned(); }, [fetchTotalBurned]);
 
+  // ===== Game requirement check =====
+  const [gamesPlayed, setGamesPlayed] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    if (!address) { setGamesPlayed(null); return; }
+    let alive = true;
+    const fetchStats = async () => {
+      try {
+        const r = await fetch(`https://game.test-hub.xyz/simple/stats/${address}`);
+        const j = await r.json();
+        const n = Number(j?.gamesPlayed ?? j?.data?.gamesPlayed ?? 0);
+        if (alive) setGamesPlayed(isNaN(n) ? 0 : n);
+      } catch {
+        if (alive) setGamesPlayed((p) => p ?? 0);
+      }
+    };
+    fetchStats();
+    const id = setInterval(fetchStats, 30000);
+    return () => { alive = false; clearInterval(id); };
+  }, [address]);
+  const gamesOk = (gamesPlayed ?? 0) >= 5;
+
   const closeProgress = () => setProgress((p) => ({ ...p, open: false }));
   const bridgeAgain = () => { closeProgress(); setAmount(""); };
 

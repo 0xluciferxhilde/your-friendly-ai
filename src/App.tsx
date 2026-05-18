@@ -3434,7 +3434,7 @@ const WeeklyLeaderboard = ({ className = '' }: { className?: string }) => {
 const MathSlashPage = ({ onBack }: { onBack: () => void }) => {
   const { address, isConnected } = useAccount();
   const SIMPLE_API = 'https://game.test-hub.xyz';
-  const DAILY_LIMIT = 5;
+  const DAILY_LIMIT = 15;
   const RATE = 0.00004615;
 
   const [stats, setStats] = useState<any>(null);
@@ -3629,7 +3629,6 @@ const MathSlashPage = ({ onBack }: { onBack: () => void }) => {
     setAutoStart(false);
     setStarting(true);
     liveScoreRef.current = 0;
-    fetchStats();
     try {
       const r = await fetch(`${SIMPLE_API}/simple/start`, {
         method: 'POST',

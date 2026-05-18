@@ -1855,7 +1855,7 @@ const LitDeX = (() => {
   async function loadStats() {
     if (!walletAddress) return;
     try {
-      const r = await fetch(`${API}/game/mathslash/stats/${walletAddress}`);
+      const r = await fetch(`${API}/simple/stats/${walletAddress}`);
       const data = await r.json();
 
       if (!r.ok) {
@@ -1916,7 +1916,7 @@ const LitDeX = (() => {
         startBtn.style.cursor = 'not-allowed';
         startBtn.setAttribute('disabled', 'true');
         startBtn.onclick = null;
-        showErr('start-error', '⚠ Daily limit (5 games) reached. Resets at 00:00 IST.');
+        showErr('start-error', '⚠ Daily limit (10 games) reached. Resets at 00:00 IST.');
       }
 
     } catch (err) {

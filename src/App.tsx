@@ -3434,7 +3434,7 @@ const WeeklyLeaderboard = ({ className = '' }: { className?: string }) => {
 const MathSlashPage = ({ onBack }: { onBack: () => void }) => {
   const { address, isConnected } = useAccount();
   const SIMPLE_API = 'https://game.test-hub.xyz';
-  const DAILY_LIMIT = 15;
+  const DAILY_LIMIT = 5;
   const RATE = 0.00004615;
 
   const [stats, setStats] = useState<any>(null);

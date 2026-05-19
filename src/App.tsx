@@ -4354,13 +4354,21 @@ const MessengerPage = () => {
                     <div className="flex items-center gap-6">
                        <button 
                          onClick={handleSend}
-                         disabled={!isConnected || sending || !content || (msgType === 'direct' && !recipient)}
+                         disabled={!isConnected || sending || !content || (msgType === 'direct' && !recipient) || msgCount >= DAILY_MSG_LIMIT}
+                         style={msgCount >= DAILY_MSG_LIMIT ? { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
                          className="px-12 py-4 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] disabled:opacity-30 transition-all shadow-[0_0_50px_rgba(255,255,255,0.1)] flex items-center gap-3"
                        >
                          {sending ? "TRANSMITTING..." : "AUTHORIZE TRANSMISSION"}
                        </button>
                        {!isConnected && (
                          <p className="text-[10px] text-white/20 font-bold uppercase tracking-widest">Connect wallet to send</p>
+                       )}
+                       {isConnected && (
+                         <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">
+                           {msgCount >= DAILY_MSG_LIMIT
+                             ? `Daily limit reached (${DAILY_MSG_LIMIT}/${DAILY_MSG_LIMIT})`
+                             : `${msgCount}/${DAILY_MSG_LIMIT} messages today`}
+                         </p>
                        )}
                     </div>
 

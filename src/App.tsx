@@ -4056,6 +4056,29 @@ const MessengerPage = () => {
   const [lastSentHash, setLastSentHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [backendPoints, setBackendPoints] = useState<number>(0);
+  const [msgCount, setMsgCount] = useState<number>(0);
+  const DAILY_MSG_LIMIT = 10;
+
+  const getISTDate = () => new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const msgStorageKey = address ? `litdex_msg_count_${address}` : null;
+
+  const readLocalMsgCount = (): number => {
+    if (!msgStorageKey) return 0;
+    try {
+      const raw = localStorage.getItem(msgStorageKey);
+      if (!raw) return 0;
+      const parsed = JSON.parse(raw);
+      if (parsed?.date !== getISTDate()) return 0;
+      return Number(parsed?.count ?? 0);
+    } catch { return 0; }
+  };
+
+  const writeLocalMsgCount = (count: number) => {
+    if (!msgStorageKey) return;
+    try {
+      localStorage.setItem(msgStorageKey, JSON.stringify({ date: getISTDate(), count }));
+    } catch { /* ignore */ }
+  };
 
   const fetchBackendPoints = async () => {
     if (!address) return;
@@ -4098,19 +4121,55 @@ const MessengerPage = () => {
       fetchStats();
       fetchBackendPoints();
       if (activeTab === 'inbox') fetchMessages();
+
+      // Reset local count if IST date has rolled over, then load
+      setMsgCount(readLocalMsgCount());
+
+      // Try to get authoritative count from backend
+      (async () => {
+        try {
+          const r = await fetch(`https://api.test-hub.xyz/msg/count/${address}`);
+          if (r.ok) {
+            const j = await r.json();
+            const c = Number(j?.msgsToday ?? j?.count ?? NaN);
+            if (!Number.isNaN(c)) {
+              setMsgCount(c);
+              writeLocalMsgCount(c);
+            }
+          }
+        } catch { /* ignore */ }
+      })();
     }
   }, [isConnected, address, activeTab, inboxTab]);
 
   const handleSend = async () => {
     if (!content) return;
+    if (msgCount >= DAILY_MSG_LIMIT) return;
     setSending(true);
     setError(null);
     try {
       const { sendMessage } = await import('./lib/litdex-core-logic');
       const target = msgType === 'public' ? 'public' : recipient;
 
-      const sentHash = await sendMessage(target, content);
+      const result = await sendMessage(target, content);
+      const sentHash = result.hash;
       setLastSentHash(sentHash);
+
+      // Handle daily limit response from backend
+      if (result.success === false && result.reason === "daily_limit") {
+        setMsgCount(DAILY_MSG_LIMIT);
+        writeLocalMsgCount(DAILY_MSG_LIMIT);
+        setError("Daily limit reached");
+        setSending(false);
+        return;
+      }
+
+      // Determine new count: prefer backend value, otherwise increment locally
+      const nextCount = typeof result.msgsToday === "number"
+        ? result.msgsToday
+        : (readLocalMsgCount() + 1);
+      setMsgCount(nextCount);
+      writeLocalMsgCount(nextCount);
 
       // Refresh stats and backend-authoritative points (backend handles all point logic)
       await fetchStats();
@@ -4123,7 +4182,7 @@ const MessengerPage = () => {
         title: "MESSAGE SENT",
         subtitle: "PROTOCOL VERIFICATION COMPLETE",
         rows: [
-          { label: "POINTS EARNED", value: "+2 PTS" },
+          { label: "POINTS EARNED", value: "+2 PTS (+2 BONUS)" },
           { label: "TRANSACTION", value: shortHash, href: explorerUrl },
           { label: "STATUS", value: "ON-CHAIN DELIVERED" },
         ],
@@ -4295,13 +4354,21 @@ const MessengerPage = () => {
                     <div className="flex items-center gap-6">
                        <button 
                          onClick={handleSend}
-                         disabled={!isConnected || sending || !content || (msgType === 'direct' && !recipient)}
+                         disabled={!isConnected || sending || !content || (msgType === 'direct' && !recipient) || msgCount >= DAILY_MSG_LIMIT}
+                         style={msgCount >= DAILY_MSG_LIMIT ? { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
                          className="px-12 py-4 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] disabled:opacity-30 transition-all shadow-[0_0_50px_rgba(255,255,255,0.1)] flex items-center gap-3"
                        >
                          {sending ? "TRANSMITTING..." : "AUTHORIZE TRANSMISSION"}
                        </button>
                        {!isConnected && (
                          <p className="text-[10px] text-white/20 font-bold uppercase tracking-widest">Connect wallet to send</p>
+                       )}
+                       {isConnected && (
+                         <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">
+                           {msgCount >= DAILY_MSG_LIMIT
+                             ? `Daily limit reached (${DAILY_MSG_LIMIT}/${DAILY_MSG_LIMIT})`
+                             : `${msgCount}/${DAILY_MSG_LIMIT} messages today`}
+                         </p>
                        )}
                     </div>
 

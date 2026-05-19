@@ -1523,7 +1523,14 @@ export async function readMessages(address: string): Promise<any[]> {
   }
 }
 
-export async function sendMessage(to: string, content: string): Promise<string> {
+export type SendMessageResult = {
+  hash: string;
+  success?: boolean;
+  msgsToday?: number;
+  reason?: string;
+};
+
+export async function sendMessage(to: string, content: string): Promise<SendMessageResult> {
   const eth = (window as any).ethereum;
   if (!eth) throw new Error("Wallet not found");
   const provider = new BrowserProvider(eth);
@@ -1536,20 +1543,30 @@ export async function sendMessage(to: string, content: string): Promise<string> 
   } else {
     tx = await contract.sendDirect(to, content);
   }
-  
+
   const receipt = await tx.wait();
-  
+
+  let success: boolean | undefined;
+  let msgsToday: number | undefined;
+  let reason: string | undefined;
+
   // POST https://api.test-hub.xyz/msg/sent
   try {
     const address = await signer.getAddress();
-    await fetch("https://api.test-hub.xyz/msg/sent", {
+    const r = await fetch("https://api.test-hub.xyz/msg/sent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ wallet: address })
     });
+    try {
+      const j = await r.json();
+      success = j?.success;
+      msgsToday = typeof j?.msgsToday === "number" ? j.msgsToday : undefined;
+      reason = j?.reason;
+    } catch { /* ignore parse errors */ }
   } catch (e) {
     console.warn("Telemetry failed:", e);
   }
 
-  return receipt.hash;
+  return { hash: receipt.hash, success, msgsToday, reason };
 }

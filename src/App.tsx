@@ -3304,7 +3304,7 @@ const QuestsPage = () => {
   ];
 
   const approvedQuotes = tasks.filter(t => t.category === 'quote' && t.quote_status === 'approved').length;
-  const totalEarned = tasks.reduce((acc, t) => acc + (t.claimed ? t.points : 0), 0) + approvedQuotes * 50;
+  const totalEarned = tasks.reduce((acc, t) => acc + (t.category !== 'quote' && t.claimed ? t.points : 0), 0) + approvedQuotes * 50;
   const totalPossible = 820;
 
   const threadSub = submissions.find(s => s.type === 'thread');

@@ -68,10 +68,12 @@ interface NavItemProps {
 // --- Components ---
 
 const LogoLD = ({ className = "", size = 20 }: { className?: string; size?: number }) => (
-  <div className={cn("relative flex items-center justify-center font-black italic tracking-tighter cursor-default filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]", className)}>
-    <span style={{ fontSize: size }} className="text-black leading-none select-none">L</span>
-    <span style={{ fontSize: size }} className="text-black leading-none -ml-[0.1em] select-none">D</span>
-  </div>
+  <img
+    src="https://raw.githubusercontent.com/notfoundsuser/kindred-spirit/main/public/coins/web_logo.png"
+    alt="LitDEX"
+    style={{ width: size * 1.6, height: size * 1.6 }}
+    className={cn("object-contain select-none", className)}
+  />
 );
 
 const NavItem = ({ icon: Icon, title, desc, badge, onClick }: NavItemProps) => (
@@ -1142,8 +1144,8 @@ const NFTsPage = () => {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-12 container mx-auto px-4">
       <div className="mb-10">
-        <h1 className="text-3xl md:text-4xl font-bold tracking-tighter mb-2">LitDeX NFTs</h1>
-        <p className="text-brand-text-muted text-sm max-w-xl">Mint LitDeX NFTs with your points and earn daily zkLTC, USDC and LDEX rewards.</p>
+        <h1 className="text-3xl md:text-4xl font-bold tracking-tighter mb-2">LitDEX NFTs</h1>
+        <p className="text-brand-text-muted text-sm max-w-xl">Mint LitDEX NFTs with your points and earn daily zkLTC, USDC and LDEX rewards.</p>
         
       </div>
 
@@ -1167,7 +1169,7 @@ const NFTsPage = () => {
               <div className="p-5 space-y-4">
                 <div>
                   <h3 className="text-lg font-bold">{tier.name}</h3>
-                  <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">LitDeX Genesis</p>
+                  <p className="text-[10px] font-bold text-brand-text-muted uppercase tracking-widest">LitDEX Genesis</p>
                 </div>
 
                 <div>
@@ -1246,7 +1248,7 @@ const NFTsPage = () => {
                       <h3 className="text-lg font-bold flex items-center justify-between text-white">
                         {info.name}
                       </h3>
-                      <p className="text-[10px] font-bold text-[#555] uppercase tracking-widest">LitDeX Genesis Badge</p>
+                      <p className="text-[10px] font-bold text-[#555] uppercase tracking-widest">LitDEX Genesis Badge</p>
                     </div>
 
                     <div className="bg-white/[0.02] rounded-xl border border-white/5 p-3 mb-5">
@@ -1817,7 +1819,7 @@ const ERC20Form = ({ onDeployed }: any) => {
                 <span className="text-[9px] font-bold uppercase tracking-widest">+5 points earned automatically ({deployDaily}/100 today)</span>
               </div>
               <p className="text-[9px] text-brand-text-muted italic opacity-60">
-                Deploys via LitDeXDeployer • points credited automatically by relayer.
+                Deploys via LitDEXDeployer • points credited automatically by relayer.
               </p>
             </div>
 
@@ -3518,8 +3520,8 @@ const QuestsPage = () => {
               <div className="flex items-start gap-4 mb-4">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0 border bg-white/5 border-white/10 text-white">𝕏</div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-white">Explain LitDeX on X</h3>
-                  <p className="text-xs text-brand-text-muted mt-1">Write a thread explaining how LitDeX works and post it on X</p>
+                  <h3 className="font-semibold text-white">Explain LitDEX on X</h3>
+                  <p className="text-xs text-brand-text-muted mt-1">Write a thread explaining how LitDEX works and post it on X</p>
                   <ul className="mt-3 space-y-1 text-[11px] text-white/80">
                     <li>• Regular: <span className="font-mono text-white">500 pts + 0.1 zkLTC</span></li>
                     <li>• ✅ Verified X: <span className="font-mono text-white">1000 pts + 1 zkLTC</span></li>
@@ -3556,7 +3558,7 @@ const QuestsPage = () => {
               <div className="flex items-start gap-4 mb-4">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0 border bg-white/5 border-white/10 text-white">🎬</div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-white">Record & Explain LitDeX</h3>
+                  <h3 className="font-semibold text-white">Record & Explain LitDEX</h3>
                   <p className="text-xs text-brand-text-muted mt-1">Post a video or detailed post on X or YouTube. Min 1000 views required.</p>
                   <ul className="mt-3 space-y-1 text-[11px] text-white/80">
                     <li>• Reward: <span className="font-mono text-white">6000 pts + 1 zkLTC</span></li>
@@ -5235,7 +5237,7 @@ export default function App() {
             <div className="absolute -inset-2 bg-white/10 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
           </div>
           <span className="hidden sm:inline text-2xl font-black italic tracking-tighter text-white dark:text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
-            LitDeX
+            LitDEX
           </span>
         </div>
         
@@ -5386,10 +5388,10 @@ export default function App() {
             <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-white text-sm font-bold">
               <LogoLD size={14} />
             </div>
-            <span className="text-brand-text-muted text-xs font-mono">LitDeX Testnet</span>
+            <span className="text-brand-text-muted text-xs font-mono">LitDEX Testnet</span>
           </div>
           <div className="flex gap-8 text-xs uppercase font-mono tracking-widest text-brand-text-muted">
-            <a href="https://x.com/LitDeXApp" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Twitter (X)</a>
+            <a href="https://x.com/LitDEXApp" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Twitter (X)</a>
             <a href="https://t.me/litdex_discussion" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Telegram</a>
             <a href="https://litdex.gitbook.io/litdex/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Docs</a>
           </div>

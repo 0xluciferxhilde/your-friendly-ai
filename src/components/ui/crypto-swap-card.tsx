@@ -344,7 +344,7 @@ export default function SwapCard({
           rows: [
             { label: "SENT", value: `${fromAmount} ${ti}` },
             { label: "RECEIVED", value: `${toAmount} ${to}` },
-            { label: "ROUTER", value: ROUTERS[rKey].label || "LitDeX" },
+            { label: "ROUTER", value: ROUTERS[rKey].label || "LitDEX" },
           ],
         });
         refreshPoints();
@@ -981,7 +981,7 @@ export default function SwapCard({
 
       <footer className="flex items-center justify-between text-[9px] text-brand-text-muted font-bold uppercase tracking-[0.2em]">
         <div className="flex flex-col gap-1">
-          <span>Powered by LitDeX</span>
+          <span>Powered by LitDEX</span>
           {activeRouter && mode === "swap" && (
             <span className="text-white opacity-60">Routed via {activeRouter}</span>
           )}

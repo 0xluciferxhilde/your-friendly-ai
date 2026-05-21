@@ -841,7 +841,7 @@ export default function BridgeCard({ className = "", onNavigate }: { className?:
         )}
 
         <footer className="flex items-center justify-between text-[9px] text-white/50 font-bold uppercase tracking-[0.2em] font-mono">
-          <span>Powered by LitDeX</span>
+          <span>Powered by LitDEX</span>
           <span>Real-time bridge</span>
         </footer>
       </section>

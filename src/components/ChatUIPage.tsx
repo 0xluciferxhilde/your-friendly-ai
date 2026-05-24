@@ -187,6 +187,7 @@ export default function ChatUIPage() {
   const [busy, setBusy] = useState(false);
   const namesRef = useRef<Record<string, string>>({});
   const bodyRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const totalBudget = useMemo(() => {
     if (!addBounty) return "0";

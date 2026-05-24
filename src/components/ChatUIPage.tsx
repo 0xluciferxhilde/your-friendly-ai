@@ -467,11 +467,23 @@ export default function ChatUIPage() {
     if (!replyTo) return;
     const body = draft.trim();
     if (!body) return;
-    const mention = `@${replyTo.name} `;
+    const mention = `@${short(replyTo.authorAddr)} `;
     const full = body.startsWith("@") ? body : mention + body;
-    await commentPost(replyTo.postId, full);
-    setDraft("");
-    setReplyTo(null);
+    setBusy(true);
+    try {
+      await writeContract(
+        HUB_POSTS_ADDRESS,
+        encodeCall(SELECTOR.createPost, [
+          { type: "string", value: full },
+          { type: "uint", value: 0n },
+          { type: "uint", value: 0n },
+        ]),
+        0n,
+      );
+      setDraft("");
+      setReplyTo(null);
+      await loadPosts();
+    } finally { setBusy(false); }
   };
 
   const openCreatePost = () => {
@@ -708,12 +720,6 @@ export default function ChatUIPage() {
                                 className="p-2 rounded-full hover:bg-white/10 transition-colors"
                               >
                                 <Share2 size={16} />
-                              </button>
-                              <button
-                                aria-label="More"
-                                className="p-2 rounded-full hover:bg-white/10 transition-colors"
-                              >
-                                <MoreHorizontal size={16} />
                               </button>
                             </div>
                           </div>

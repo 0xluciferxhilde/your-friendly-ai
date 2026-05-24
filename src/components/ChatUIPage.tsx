@@ -385,7 +385,7 @@ export default function ChatUIPage() {
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
-  }, [messages, posts, commentOpen]);
+  }, [messages, posts, replyTo]);
 
   const refreshPost = useCallback(async (postId: string) => {
     try {

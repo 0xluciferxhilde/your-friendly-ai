@@ -423,14 +423,23 @@ export default function ChatUIPage() {
     } finally { setBusy(false); }
   };
 
-  const commentPost = async (postId: string) => {
-    const text = commentDraft.trim();
+  const commentPost = async (postId: string, rawText: string) => {
+    const text = (rawText || "").trim();
     if (!text) return;
     setBusy(true);
     try {
       await writeContract(HUB_POSTS_ADDRESS, encodeCall(SELECTOR.commentPost, [{ type: "uint", value: postId }, { type: "string", value: text }]));
-      setCommentDraft("");
-      setCommentOpen(null);
+      const post = posts.find((p) => p.id === postId);
+      if (post && post.author && wallet && post.author.toLowerCase() !== wallet.toLowerCase()) {
+        const senderName = namesRef.current[wallet.toLowerCase()] || short(wallet);
+        const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+        addNotif(post.author, {
+          type: "gf",
+          title: `@${senderName} replied to your post`,
+          message: preview,
+          link: `/chat`,
+        });
+      }
       await refreshPost(postId);
       try {
         if (wallet) {
@@ -442,6 +451,17 @@ export default function ChatUIPage() {
         }
       } catch (err) { console.error("[ChatUI] post status error:", err); }
     } finally { setBusy(false); }
+  };
+
+  const sendReply = async () => {
+    if (!replyTo) return;
+    const body = draft.trim();
+    if (!body) return;
+    const mention = `@${replyTo.name} `;
+    const full = body.startsWith("@") ? body : mention + body;
+    await commentPost(replyTo.postId, full);
+    setDraft("");
+    setReplyTo(null);
   };
 
   const openCreatePost = () => {

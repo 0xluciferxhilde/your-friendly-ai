@@ -172,8 +172,7 @@ export default function ChatUIPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
-  const [commentOpen, setCommentOpen] = useState<string | null>(null);
-  const [commentDraft, setCommentDraft] = useState("");
+  const [replyTo, setReplyTo] = useState<{ postId: string; name: string; authorAddr: string; content: string } | null>(null);
   const [commentedPosts, setCommentedPosts] = useState<Record<string, boolean>>({});
   const [createOpen, setCreateOpen] = useState(false);
   const [postContent, setPostContent] = useState("");

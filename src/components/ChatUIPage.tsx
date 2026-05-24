@@ -170,6 +170,7 @@ export default function ChatUIPage() {
   const [search, setSearch] = useState("");
   const [commentOpen, setCommentOpen] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
+  const [commentedPosts, setCommentedPosts] = useState<Record<string, boolean>>({});
   const [createOpen, setCreateOpen] = useState(false);
   const [postContent, setPostContent] = useState("");
   const [addBounty, setAddBounty] = useState(false);
@@ -374,12 +375,29 @@ export default function ChatUIPage() {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   }, [messages, posts, commentOpen]);
 
+  const refreshPost = useCallback(async (postId: string) => {
+    try {
+      const r = await fetch(`${API}/hub/posts/${postId}`);
+      const j = await r.json();
+      const p = j.post || j.data || j;
+      if (!p) return;
+      setPosts((list) => list.map((it) => it.id === postId ? {
+        ...it,
+        content: p.content ?? it.content,
+        likeCount: Number(p.likeCount ?? p.likes ?? it.likeCount),
+        commentCount: Number(p.commentCount ?? p.comments ?? it.commentCount),
+        bountyActive: Boolean(p.bountyActive ?? p.hasBounty ?? it.bountyActive),
+      } : it));
+    } catch (err) { console.error("[ChatUI] refreshPost error:", err); }
+  }, []);
+
   const likePost = async (post: Post) => {
     if (post.liked) return;
     setBusy(true);
     try {
       await writeContract(HUB_POSTS_ADDRESS, encodeCall(SELECTOR.likePost, [{ type: "uint", value: post.postId }]));
-      setPosts((list) => list.map((p) => p.id === post.id ? { ...p, liked: true, likeCount: p.likeCount + 1 } : p));
+      setPosts((list) => list.map((p) => p.id === post.id ? { ...p, liked: true } : p));
+      await refreshPost(post.postId);
     } finally { setBusy(false); }
   };
 
@@ -389,9 +407,18 @@ export default function ChatUIPage() {
     setBusy(true);
     try {
       await writeContract(HUB_POSTS_ADDRESS, encodeCall(SELECTOR.commentPost, [{ type: "uint", value: postId }, { type: "string", value: text }]));
-      setPosts((list) => list.map((p) => p.id === postId ? { ...p, commentCount: p.commentCount + 1 } : p));
       setCommentDraft("");
       setCommentOpen(null);
+      await refreshPost(postId);
+      try {
+        if (wallet) {
+          const r = await fetch(`${API}/hub/posts/${postId}/status/${wallet}`);
+          const j = await r.json();
+          if (j?.hasCommented || j?.commented) {
+            setCommentedPosts((m) => ({ ...m, [postId]: true }));
+          }
+        }
+      } catch (err) { console.error("[ChatUI] post status error:", err); }
     } finally { setBusy(false); }
   };
 
@@ -560,7 +587,7 @@ export default function ChatUIPage() {
             <div ref={bodyRef} className="flex-1 bg-brand-bg overflow-y-auto px-4 py-4 space-y-3">
               {!showChat && <div className="h-full flex items-center justify-center text-brand-text-muted text-sm">Select a chat to start messaging</div>}
 
-              {tab === "global" && posts.map((post) => (
+              {tab === "global" && [...posts].sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0)).map((post) => (
                 <div key={post.id} className="flex justify-start">
                   <div className="relative max-w-[760px] w-fit rounded-lg border border-brand-border bg-brand-surface px-3 py-3 text-sm text-brand-text-primary">
                     {post.bountyActive && <div className="absolute right-3 top-3 text-emerald-400" title="Bounty active">💰</div>}
@@ -571,10 +598,10 @@ export default function ChatUIPage() {
                     <div className="mt-2 whitespace-pre-wrap break-words leading-relaxed">{post.content}</div>
                     <div className="mt-3 flex items-center gap-3 text-xs text-brand-text-muted">
                       <button disabled={busy || post.liked} onClick={() => likePost(post)} className={cn("inline-flex items-center gap-1 hover:text-brand-text-primary disabled:cursor-default", post.liked && "opacity-50")}><Heart size={14} /> {post.likeCount}</button>
-                      <button onClick={() => setCommentOpen(commentOpen === post.id ? null : post.id)} className="inline-flex items-center gap-1 hover:text-brand-text-primary"><MessageSquare size={14} /> {post.commentCount}</button>
+                      <button disabled={busy || commentedPosts[post.id]} onClick={() => setCommentOpen(commentOpen === post.id ? null : post.id)} className={cn("inline-flex items-center gap-1 hover:text-brand-text-primary disabled:cursor-default", commentedPosts[post.id] && "opacity-50")}><MessageSquare size={14} /> {post.commentCount}</button>
                       <button onClick={() => sharePost(post)} className="inline-flex items-center gap-1 hover:text-brand-text-primary"><Share2 size={14} /> Share</button>
                     </div>
-                    {commentOpen === post.id && (
+                    {commentOpen === post.id && !commentedPosts[post.id] && (
                       <div className="mt-3 flex items-center gap-2 border-t border-brand-border pt-3">
                         <input value={commentDraft} onChange={(e) => setCommentDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") commentPost(post.id); }} placeholder="Write a comment" className="min-w-0 flex-1 h-9 rounded-md bg-brand-bg border border-brand-border px-3 text-sm text-brand-text-primary placeholder:text-brand-text-muted outline-none" />
                         <IconBtn aria-label="Send comment" disabled={busy} onClick={() => commentPost(post.id)}><Send size={16} /></IconBtn>
@@ -584,8 +611,9 @@ export default function ChatUIPage() {
                 </div>
               ))}
 
-              {tab === "private" && showChat && messages.map((m, i) => {
-                const mine = (m.from || m.wallet || "").toLowerCase() === wallet.toLowerCase();
+              {tab === "private" && showChat && [...messages].sort((a, b) => Number(a.timestamp || a.ts || 0) - Number(b.timestamp || b.ts || 0)).map((m, i) => {
+                const fromAddr = (m.from || m.wallet || (m as any).fromWallet || (m as any).sender || "").toString();
+                const mine = fromAddr.toLowerCase() === wallet.toLowerCase();
                 return (
                   <div key={m.id || i} className={cn("flex", mine ? "justify-end" : "justify-start")}>
                     <div className={cn("max-w-[70%] rounded-lg px-3 py-2 text-sm border", mine ? "bg-white/10 border-white/10 text-brand-text-primary" : "bg-brand-surface border-brand-border text-brand-text-primary")}>

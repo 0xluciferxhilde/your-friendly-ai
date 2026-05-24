@@ -259,13 +259,16 @@ export default function ChatUIPage() {
 
   const loadPosts = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/hub/posts`);
-      const j = await r.json();
-      const arr = readArray(j, ["posts", "data", "items"]);
+      console.log("[ChatUI] fetching posts:", `${API}/hub/posts`);
+      const response = await fetch(`${API}/hub/posts`);
+      const data = await response.json();
+      console.log("[ChatUI] /hub/posts response:", data);
+      const arr = readArray(data, ["posts", "data", "items"]);
+      console.log("[ChatUI] posts array length:", arr.length);
       const mapped = await Promise.all(arr.map(async (p: any, index: number): Promise<Post> => {
         const author = p.author || p.wallet || p.walletAddress || p.from || p.creator || "";
         const id = String(p.id ?? p.postId ?? index);
-        const name = p.name || p.litName || await resolveName(author);
+        const name = p.name || p.litName || p.creatorName || await resolveName(author);
         let liked = Boolean(p.liked || p.hasLiked);
         if (wallet && !liked) {
           try {
@@ -286,21 +289,43 @@ export default function ChatUIPage() {
           liked,
         };
       }));
+      console.log("[ChatUI] mapped posts:", mapped);
       setPosts(mapped);
-    } catch {
+    } catch (err) {
+      console.error("[ChatUI] loadPosts error:", err);
       setPosts([]);
     }
   }, [resolveName, wallet]);
 
   const loadPrivate = useCallback(async () => {
-    if (!wallet) { setContacts([]); setPending([]); return; }
+    let connectedWallet = wallet;
     try {
-      const r = await fetch(`${API}/hub/messenger/friends/${wallet}`);
-      const j = await r.json();
-      const arr = readArray(j, ["friends", "contacts", "data"]);
+      const eth: any = (window as any).ethereum;
+      if (eth && !connectedWallet) {
+        const accs: string[] = await eth.request({ method: "eth_accounts" });
+        console.log("[ChatUI] eth_accounts:", accs);
+        connectedWallet = accs?.[0] || "";
+      }
+    } catch (err) {
+      console.error("[ChatUI] eth_accounts error:", err);
+    }
+    console.log("[ChatUI] connectedWallet:", connectedWallet);
+    if (!connectedWallet) { setContacts([]); setPending([]); return; }
+    try {
+      const url = `${API}/hub/messenger/friends/${connectedWallet}`;
+      console.log("[ChatUI] fetching friends:", url);
+      const response = await fetch(url);
+      const data = await response.json();
+      console.log("[ChatUI] /hub/messenger/friends response:", data);
+      const arr = readArray(data, ["friends", "contacts", "data"]);
+      console.log("[ChatUI] data.friends:", arr);
       const mapped = (await Promise.all(arr.map(mapContact))).filter(Boolean) as Contact[];
+      console.log("[ChatUI] mapped contacts:", mapped);
       setContacts(mapped);
-    } catch { setContacts([]); }
+    } catch (err) {
+      console.error("[ChatUI] loadPrivate friends error:", err);
+      setContacts([]);
+    }
 
     try {
       const ids = decodeUintArray(await readContract(MESSENGER_ADDRESS, encodeCall(SELECTOR.getPendingRequests, [{ type: "address", value: wallet }])));

@@ -190,6 +190,14 @@ export default function ChatUIPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const postRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [bountyPopupOpen, setBountyPopupOpen] = useState(false);
+  const [inlineBountyActive, setInlineBountyActive] = useState(false);
+  const [inlineLikeReward, setInlineLikeReward] = useState("");
+  const [inlineCommentReward, setInlineCommentReward] = useState("");
+  const inlineBountyTotal = useMemo(() => {
+    const t = Number(inlineLikeReward || 0) + Number(inlineCommentReward || 0);
+    return Number.isFinite(t) ? t.toFixed(4) : "0";
+  }, [inlineLikeReward, inlineCommentReward]);
 
   const scrollToPost = useCallback((id: string) => {
     const el = postRefs.current[id];
@@ -463,28 +471,37 @@ export default function ChatUIPage() {
     } finally { setBusy(false); }
   };
 
-  const sendReply = async () => {
-    if (!replyTo) return;
+  const sendGlobal = async () => {
     const body = draft.trim();
     if (!body) return;
-    const mention = `@${short(replyTo.authorAddr)} `;
-    const full = body.startsWith("@") ? body : mention + body;
+    const content = replyTo
+      ? (body.startsWith("@") ? body : `@${short(replyTo.authorAddr)} ${body}`)
+      : body;
+    const useBounty = inlineBountyActive && (Number(inlineLikeReward || 0) > 0 || Number(inlineCommentReward || 0) > 0);
+    const likeWei = useBounty ? parseAmount(inlineLikeReward || "0") : 0n;
+    const commentWei = useBounty ? parseAmount(inlineCommentReward || "0") : 0n;
+    const budgetWei = useBounty ? (likeWei + commentWei) : 0n;
     setBusy(true);
     try {
       await writeContract(
         HUB_POSTS_ADDRESS,
         encodeCall(SELECTOR.createPost, [
-          { type: "string", value: full },
-          { type: "uint", value: 0n },
-          { type: "uint", value: 0n },
+          { type: "string", value: content },
+          { type: "uint", value: likeWei },
+          { type: "uint", value: commentWei },
         ]),
-        0n,
+        budgetWei,
       );
       setDraft("");
       setReplyTo(null);
+      setInlineBountyActive(false);
+      setInlineLikeReward("");
+      setInlineCommentReward("");
+      setBountyPopupOpen(false);
       await loadPosts();
     } finally { setBusy(false); }
   };
+
 
   const openCreatePost = () => {
     const text = draft.trim();
@@ -671,10 +688,12 @@ export default function ChatUIPage() {
                 return items.map((item) => {
                   if (item.kind === "post") {
                     const post = item.post;
-                    const tagged = !!walletLc && (post.comments || []).some((c) => {
-                      const t = (c.text || "").toLowerCase();
-                      return t.includes(walletLc) || (myLitName && myLitName.endsWith(".lit") && t.includes(myLitName));
-                    });
+                    const shortMe = walletLc ? short(wallet).toLowerCase() : "";
+                    const contentLc = (post.content || "").toLowerCase();
+                    const tagged = !!walletLc && (
+                      (shortMe && contentLc.includes(`@${shortMe}`)) ||
+                      (myLitName && contentLc.includes(`@${myLitName}`))
+                    );
                     const isHighlighted = highlightedId === post.id;
                     return (
                       <div key={item.id} className="flex justify-start">
@@ -682,7 +701,7 @@ export default function ChatUIPage() {
                           ref={(el) => { postRefs.current[post.id] = el; }}
                           className={cn(
                             "group relative max-w-[760px] w-fit rounded-lg border bg-brand-surface px-3 py-3 text-sm text-brand-text-primary transition-all",
-                            tagged ? "border-l-4 border-l-blue-500 border-brand-border" : "border-brand-border",
+                            tagged ? "border-l-4 border-l-gray-400 border-brand-border bg-gray-700/40" : "border-brand-border",
                             isHighlighted && "ring-2 ring-brand-teal"
                           )}
                         >
@@ -801,18 +820,81 @@ export default function ChatUIPage() {
                   </button>
                 </div>
               )}
-              <div className="flex items-center gap-1 px-2 py-2">
+              <div className="relative flex items-center gap-1 px-2 py-2">
                 <IconBtn aria-label="Emoji"><Smile size={18} /></IconBtn>
                 <IconBtn aria-label="Attach"><Paperclip size={18} /></IconBtn>
+                {tab === "global" && (
+                  <button
+                    type="button"
+                    aria-label="Add bounty"
+                    onClick={() => setBountyPopupOpen((v) => !v)}
+                    className="h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-white/5 transition-colors"
+                    title="Add bounty"
+                  >
+                    <img
+                      src="https://gitlab.com/sachinhure/hello-world/-/raw/main/public/coins/zkltc.jpg"
+                      alt="zkLTC"
+                      style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover" }}
+                    />
+                  </button>
+                )}
                 {tab === "private" && <IconBtn aria-label="Send zkLTC" disabled={!current} onClick={() => setTipOpen(true)}><DollarSign size={18} /></IconBtn>}
+                {tab === "global" && bountyPopupOpen && (
+                  <div className="absolute bottom-full left-2 mb-2 z-20 w-72 rounded-lg border border-brand-border bg-brand-surface-2 p-3 shadow-2xl">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-xs font-semibold text-brand-text-primary">Add bounty</div>
+                      <button aria-label="Close" onClick={() => setBountyPopupOpen(false)} className="p-1 rounded hover:bg-white/10 text-brand-text-muted hover:text-brand-text-primary"><X size={12} /></button>
+                    </div>
+                    <label className="block text-[11px] text-brand-text-muted mb-1">♥ Like reward (zkLTC)</label>
+                    <input
+                      value={inlineLikeReward}
+                      onChange={(e) => setInlineLikeReward(e.target.value)}
+                      placeholder="0.01"
+                      className="w-full h-8 px-2 mb-2 rounded-md bg-brand-bg border border-brand-border text-xs text-brand-text-primary outline-none"
+                    />
+                    <label className="block text-[11px] text-brand-text-muted mb-1">💬 Reply reward (zkLTC)</label>
+                    <input
+                      value={inlineCommentReward}
+                      onChange={(e) => setInlineCommentReward(e.target.value)}
+                      placeholder="0.01"
+                      className="w-full h-8 px-2 mb-2 rounded-md bg-brand-bg border border-brand-border text-xs text-brand-text-primary outline-none"
+                    />
+                    <div className="text-[11px] text-brand-text-muted mb-2">Total bounty: <span className="text-brand-text-primary font-medium">{inlineBountyTotal} zkLTC</span></div>
+                    <button
+                      onClick={() => {
+                        const hasVal = Number(inlineLikeReward || 0) > 0 || Number(inlineCommentReward || 0) > 0;
+                        setInlineBountyActive(hasVal);
+                        setBountyPopupOpen(false);
+                      }}
+                      className="w-full h-8 rounded-md bg-brand-teal text-brand-bg text-xs font-semibold"
+                    >
+                      {inlineBountyActive ? "Update Bounty" : "Add Bounty"}
+                    </button>
+                    {inlineBountyActive && (
+                      <button
+                        onClick={() => {
+                          setInlineBountyActive(false);
+                          setInlineLikeReward("");
+                          setInlineCommentReward("");
+                          setBountyPopupOpen(false);
+                        }}
+                        className="mt-2 w-full h-7 rounded-md border border-brand-border text-[11px] text-brand-text-muted hover:text-brand-text-primary"
+                      >
+                        Remove bounty
+                      </button>
+                    )}
+                  </div>
+                )}
+                {tab === "global" && inlineBountyActive && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">💰 {inlineBountyTotal}</span>
+                )}
                 <input
                   ref={inputRef}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      if (tab === "global" && replyTo) sendReply();
-                      else if (tab === "global") openCreatePost();
+                      if (tab === "global") sendGlobal();
                       else sendPrivate();
                     } else if (e.key === "Escape" && replyTo) {
                       setReplyTo(null);
@@ -829,7 +911,7 @@ export default function ChatUIPage() {
                 <IconBtn
                   aria-label="Send"
                   disabled={!showChat || busy}
-                  onClick={tab === "global" ? (replyTo ? sendReply : openCreatePost) : sendPrivate}
+                  onClick={tab === "global" ? sendGlobal : sendPrivate}
                 >
                   <Send size={18} />
                 </IconBtn>

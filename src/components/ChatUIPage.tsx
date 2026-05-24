@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { addNotif } from "@/lib/notifications";
 
 const API = "https://hub.test-hub.xyz";
 const CHAIN_ID_HEX = "0x1159";

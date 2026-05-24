@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { addNotif } from "@/lib/notifications";
 
 const API = "https://hub.test-hub.xyz";
 const CHAIN_ID_HEX = "0x1159";
@@ -171,8 +172,7 @@ export default function ChatUIPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
-  const [commentOpen, setCommentOpen] = useState<string | null>(null);
-  const [commentDraft, setCommentDraft] = useState("");
+  const [replyTo, setReplyTo] = useState<{ postId: string; name: string; authorAddr: string; content: string } | null>(null);
   const [commentedPosts, setCommentedPosts] = useState<Record<string, boolean>>({});
   const [createOpen, setCreateOpen] = useState(false);
   const [postContent, setPostContent] = useState("");
@@ -187,6 +187,7 @@ export default function ChatUIPage() {
   const [busy, setBusy] = useState(false);
   const namesRef = useRef<Record<string, string>>({});
   const bodyRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const totalBudget = useMemo(() => {
     if (!addBounty) return "0";
@@ -384,7 +385,7 @@ export default function ChatUIPage() {
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
-  }, [messages, posts, commentOpen]);
+  }, [messages, posts, replyTo]);
 
   const refreshPost = useCallback(async (postId: string) => {
     try {
@@ -422,14 +423,23 @@ export default function ChatUIPage() {
     } finally { setBusy(false); }
   };
 
-  const commentPost = async (postId: string) => {
-    const text = commentDraft.trim();
+  const commentPost = async (postId: string, rawText: string) => {
+    const text = (rawText || "").trim();
     if (!text) return;
     setBusy(true);
     try {
       await writeContract(HUB_POSTS_ADDRESS, encodeCall(SELECTOR.commentPost, [{ type: "uint", value: postId }, { type: "string", value: text }]));
-      setCommentDraft("");
-      setCommentOpen(null);
+      const post = posts.find((p) => p.id === postId);
+      if (post && post.author && wallet && post.author.toLowerCase() !== wallet.toLowerCase()) {
+        const senderName = namesRef.current[wallet.toLowerCase()] || short(wallet);
+        const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+        addNotif(post.author, {
+          type: "gf",
+          title: `@${senderName} replied to your post`,
+          message: preview,
+          link: `/chat`,
+        });
+      }
       await refreshPost(postId);
       try {
         if (wallet) {
@@ -441,6 +451,17 @@ export default function ChatUIPage() {
         }
       } catch (err) { console.error("[ChatUI] post status error:", err); }
     } finally { setBusy(false); }
+  };
+
+  const sendReply = async () => {
+    if (!replyTo) return;
+    const body = draft.trim();
+    if (!body) return;
+    const mention = `@${replyTo.name} `;
+    const full = body.startsWith("@") ? body : mention + body;
+    await commentPost(replyTo.postId, full);
+    setDraft("");
+    setReplyTo(null);
   };
 
   const openCreatePost = () => {
@@ -637,7 +658,15 @@ export default function ChatUIPage() {
                           </button>
                           <button
                             aria-label="Reply"
-                            onClick={() => setCommentOpen(commentOpen === post.id ? null : post.id)}
+                            onClick={() => {
+                              setReplyTo({
+                                postId: post.id,
+                                name: post.name || short(post.author),
+                                authorAddr: post.author,
+                                content: post.content,
+                              });
+                              setTimeout(() => inputRef.current?.focus(), 0);
+                            }}
                             className="p-2 rounded-full hover:bg-white/10 transition-colors"
                           >
                             <Reply size={16} />
@@ -696,28 +725,6 @@ export default function ChatUIPage() {
                         </div>
                       )}
 
-                      {/* Reply input */}
-                      {commentOpen === post.id && (
-                        <div className="mt-3 border-t border-brand-border pt-3">
-                          <div className="mb-2 pl-3 border-l-2 border-gray-400/60 bg-white/[0.03] rounded-r-md py-1.5">
-                            <div className="flex items-center gap-1.5 text-[11px] text-brand-text-muted truncate">
-                              <Avatar name={post.name || post.author} size={16} />
-                              <span className="font-medium">{post.name || short(post.author)}</span>
-                              <span className="truncate opacity-70">{quotedPreview}</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <input
-                              value={commentDraft}
-                              onChange={(e) => setCommentDraft(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === "Enter") commentPost(post.id); }}
-                              placeholder={`Reply to ${post.name || short(post.author)}`}
-                              className="min-w-0 flex-1 h-9 rounded-md bg-brand-bg border border-brand-border px-3 text-sm text-brand-text-primary placeholder:text-brand-text-muted outline-none"
-                            />
-                            <IconBtn aria-label="Send reply" disabled={busy} onClick={() => commentPost(post.id)}><Send size={16} /></IconBtn>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 );
@@ -737,12 +744,52 @@ export default function ChatUIPage() {
               })}
             </div>
 
-            <div className="flex items-center gap-1 px-2 py-2 border-t border-brand-border">
-              <IconBtn aria-label="Emoji"><Smile size={18} /></IconBtn>
-              <IconBtn aria-label="Attach"><Paperclip size={18} /></IconBtn>
-              {tab === "private" && <IconBtn aria-label="Send zkLTC" disabled={!current} onClick={() => setTipOpen(true)}><DollarSign size={18} /></IconBtn>}
-              <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") (tab === "global" ? openCreatePost() : sendPrivate()); }} disabled={!showChat || busy} placeholder={showChat ? (tab === "global" ? "Create a global post" : "Type a message") : "Select a chat first"} className="flex-grow h-10 px-3 bg-transparent border-0 outline-none text-sm text-brand-text-primary placeholder:text-brand-text-muted disabled:opacity-50" />
-              <IconBtn aria-label="Send" disabled={!showChat || busy} onClick={tab === "global" ? openCreatePost : sendPrivate}><Send size={18} /></IconBtn>
+            <div className="border-t border-brand-border">
+              {replyTo && tab === "global" && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-white/[0.04] border-b border-brand-border text-xs text-brand-text-muted">
+                  <span className="text-brand-text-primary">↩</span>
+                  <span className="truncate">
+                    Replying to <span className="font-semibold text-brand-text-primary">@{replyTo.name}</span>
+                  </span>
+                  <span className="truncate opacity-60 hidden sm:inline">— {replyTo.content.length > 60 ? `${replyTo.content.slice(0, 60)}…` : replyTo.content}</span>
+                  <button aria-label="Cancel reply" onClick={() => setReplyTo(null)} className="ml-auto p-1 rounded hover:bg-white/10 text-brand-text-muted hover:text-brand-text-primary">
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center gap-1 px-2 py-2">
+                <IconBtn aria-label="Emoji"><Smile size={18} /></IconBtn>
+                <IconBtn aria-label="Attach"><Paperclip size={18} /></IconBtn>
+                {tab === "private" && <IconBtn aria-label="Send zkLTC" disabled={!current} onClick={() => setTipOpen(true)}><DollarSign size={18} /></IconBtn>}
+                <input
+                  ref={inputRef}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (tab === "global" && replyTo) sendReply();
+                      else if (tab === "global") openCreatePost();
+                      else sendPrivate();
+                    } else if (e.key === "Escape" && replyTo) {
+                      setReplyTo(null);
+                    }
+                  }}
+                  disabled={!showChat || busy}
+                  placeholder={
+                    !showChat ? "Select a chat first" :
+                    tab === "global" ? (replyTo ? `Reply to @${replyTo.name}` : "Create a global post") :
+                    "Type a message"
+                  }
+                  className="flex-grow h-10 px-3 bg-transparent border-0 outline-none text-sm text-brand-text-primary placeholder:text-brand-text-muted disabled:opacity-50"
+                />
+                <IconBtn
+                  aria-label="Send"
+                  disabled={!showChat || busy}
+                  onClick={tab === "global" ? (replyTo ? sendReply : openCreatePost) : sendPrivate}
+                >
+                  <Send size={18} />
+                </IconBtn>
+              </div>
             </div>
           </section>
         </div>

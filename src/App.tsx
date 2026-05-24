@@ -709,18 +709,15 @@ const CheckinPage = () => {
   const isTodayChecked = confirmed || (info && info.lastDay === currentDay);
   const streak = info ? info.streak : 0;
   
-  // Calculate Sunday bonus info for display
-  let nextSundayBonus = "";
+  // Calendar date ref
   const now = new Date();
   const istDate = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
-  if (istDate.getUTCDay() === 0) { // It is Sunday
-    const dayOfMonth = istDate.getUTCDate();
-    const week = Math.ceil(dayOfMonth / 7);
-    if (week === 1) nextSundayBonus = "0.001 zkLTC";
-    else if (week === 2) nextSundayBonus = "0.05 zkLTC";
-    else if (week === 3) nextSundayBonus = "0.01 zkLTC";
-    else if (week === 4) nextSundayBonus = "0.01 zkLTC";
-  }
+
+  // Calculate next reward based on streak cycle
+  const nextDayInCycle = (streak % 7) + 1;
+  const ldexRewards = [10, 15, 20, 25, 30, 35, 40];
+  const nextRewardLdex = ldexRewards[nextDayInCycle - 1];
+  const nextRewardHasZkltc = nextDayInCycle === 1 || nextDayInCycle === 7;
 
   // Calendar logic
   const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -773,12 +770,12 @@ const CheckinPage = () => {
                 <span className="text-[8px] font-black text-white/60 uppercase tracking-[0.3em]">Next Reward</span>
               </div>
               <div className="text-2xl font-black text-white tracking-tighter leading-none">
-                {Number(formatEther(info.nextLDEX)).toFixed(0)} <span className="text-[10px] text-white/70 font-bold uppercase ml-1.5 tracking-tighter">LDEX</span>
+                {nextRewardLdex} <span className="text-[10px] text-white/70 font-bold uppercase ml-1.5 tracking-tighter">LDEX</span>
               </div>
-              {nextSundayBonus && (
+              {nextRewardHasZkltc && (
                 <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/5 w-full">
                   <Sparkles size={10} className="text-white/20" />
-                  <span className="text-[7px] font-bold text-white/40 uppercase tracking-[0.1em]">Sunday Multiplier Active</span>
+                  <span className="text-[7px] font-bold text-white/40 uppercase tracking-[0.1em]">+ 0.01 zkLTC STREAK BONUS 🎁</span>
                 </div>
               )}
             </div>

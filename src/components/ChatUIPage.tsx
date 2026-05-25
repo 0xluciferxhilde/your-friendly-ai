@@ -1143,7 +1143,16 @@ export default function ChatUIPage() {
                   | { kind: "reply"; id: string; ts: number; parent: Post; commenter: string; name?: string; text: string; timestamp?: number | string }
                   | { kind: "transfer"; id: string; ts: number; transfer: typeof localTransfers[number] };
                 const items: FeedItem[] = [];
-                posts.forEach((post, pi) => {
+                const nowSec = Math.floor(Date.now() / 1000);
+                const cutoff = nowSec - 1800;
+                const visiblePosts = feedFilter === "bounty"
+                  ? posts.filter((p) => p.bountyActive)
+                  : posts.filter((p) => {
+                      if (p.pending) return true;
+                      const ts = Number(p.timestamp || 0);
+                      return ts === 0 || ts >= cutoff;
+                    });
+                visiblePosts.forEach((post, pi) => {
                   const pts = Number(post.timestamp || 0) || pi;
                   items.push({ kind: "post", id: `p-${post.id}`, ts: pts, post });
                   (post.comments || []).forEach((c, ci) => {

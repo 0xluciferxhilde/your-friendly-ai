@@ -1068,6 +1068,28 @@ export default function ChatUIPage() {
                 <div className="text-[15px] font-semibold text-brand-text-primary truncate">{headerName}</div>
                 <div className="text-xs text-brand-text-muted truncate">{tab === "global" ? "Public posts" : current ? short(current.address) : "Contact Info"}</div>
               </div>
+              {tab === "global" && (
+                <div className="ml-auto flex items-center gap-1 rounded-full border border-brand-border bg-brand-surface p-0.5">
+                  <button
+                    onClick={() => setFeedFilter("all")}
+                    className={cn(
+                      "px-3 h-7 rounded-full text-[11px] font-semibold transition-colors",
+                      feedFilter === "all" ? "bg-white/10 text-brand-text-primary" : "text-brand-text-muted hover:text-brand-text-primary"
+                    )}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setFeedFilter("bounty")}
+                    className={cn(
+                      "px-3 h-7 rounded-full text-[11px] font-semibold transition-colors inline-flex items-center gap-1",
+                      feedFilter === "bounty" ? "bg-emerald-500/20 text-emerald-300" : "text-brand-text-muted hover:text-brand-text-primary"
+                    )}
+                  >
+                    🪙 Bounty
+                  </button>
+                </div>
+              )}
             </div>
 
             {tab === "global" && unreadMentions.length > 0 && (

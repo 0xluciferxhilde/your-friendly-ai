@@ -230,6 +230,16 @@ export default function ChatUIPage() {
   const [bountyPopupOpen, setBountyPopupOpen] = useState(false);
   const [bountyToast, setBountyToast] = useState<{ amount: string; name: string } | null>(null);
   const [sendToast, setSendToast] = useState<string | null>(null);
+  const [sendPanelOpen, setSendPanelOpen] = useState(false);
+  const [sendTokenKey, setSendTokenKey] = useState("ZKLTC");
+  const [sendAmount, setSendAmount] = useState("");
+  const [sendRecipient, setSendRecipient] = useState("");
+  const [sendBalance, setSendBalance] = useState("0");
+  const [localTransfers, setLocalTransfers] = useState<Array<{
+    id: string; ts: number; from: string; fromName: string; to: string; toName: string;
+    amount: string; token: string; txHash: string; createdAt: number;
+  }>>([]);
+  const [fetchedReplyPosts, setFetchedReplyPosts] = useState<Record<string, { id: string; author: string; name?: string; content: string }>>({});
   const [inlineBountyActive, setInlineBountyActive] = useState(false);
   const [inlineLikeReward, setInlineLikeReward] = useState("");
   const [inlineCommentReward, setInlineCommentReward] = useState("");

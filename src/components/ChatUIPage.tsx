@@ -891,11 +891,23 @@ export default function ChatUIPage() {
   const sendPrivate = async () => {
     const text = draft.trim();
     if (!text || !current?.address) return;
+    const optimisticId = `opt-${Date.now()}`;
+    const optimisticMsg: Msg = {
+      id: optimisticId,
+      from: wallet,
+      to: current.address,
+      content: text,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setDraft("");
     setBusy(true);
     try {
       await writeContract(MESSENGER_ADDRESS, encodeCall(SELECTOR.sendMessage, [{ type: "address", value: current.address }, { type: "string", value: text }, { type: "string", value: "text" }]));
-      setDraft("");
-      loadConversation();
+      await loadConversation();
+    } catch (err) {
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      try { (await import("sonner")).toast.error("Failed to send message"); } catch { /* ignore */ }
     } finally { setBusy(false); }
   };
 

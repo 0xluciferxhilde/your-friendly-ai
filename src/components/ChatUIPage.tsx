@@ -243,6 +243,7 @@ export default function ChatUIPage() {
   const [inlineBountyActive, setInlineBountyActive] = useState(false);
   const [inlineLikeReward, setInlineLikeReward] = useState("");
   const [inlineTotalBounty, setInlineTotalBounty] = useState("");
+  const [inlineBountyMultiplier, setInlineBountyMultiplier] = useState<number>(1);
   const inlineBountyTotal = useMemo(() => {
     const t = Number(inlineTotalBounty || 0);
     return Number.isFinite(t) ? t.toFixed(4) : "0";
@@ -253,6 +254,7 @@ export default function ChatUIPage() {
     if (!per || !total || per <= 0) return 0;
     return Math.floor(total / per);
   }, [inlineLikeReward, inlineTotalBounty]);
+  const [postsLoading, setPostsLoading] = useState(true);
   const [emojiOpen, setEmojiOpen] = useState(false);
 
   const [visitedMentions, setVisitedMentions] = useState<Set<string>>(new Set());

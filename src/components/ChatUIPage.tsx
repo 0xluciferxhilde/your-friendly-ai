@@ -1350,6 +1350,27 @@ export default function ChatUIPage() {
                 {tab === "global" && inlineBountyActive && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">💰 {inlineBountyTotal}</span>
                 )}
+                {emojiOpen && (
+                  <EmojiPicker
+                    onClose={() => setEmojiOpen(false)}
+                    onPick={(emoji) => {
+                      const el = inputRef.current;
+                      if (el) {
+                        const start = el.selectionStart ?? draft.length;
+                        const end = el.selectionEnd ?? draft.length;
+                        const next = draft.slice(0, start) + emoji + draft.slice(end);
+                        setDraft(next);
+                        requestAnimationFrame(() => {
+                          el.focus();
+                          const pos = start + emoji.length;
+                          el.setSelectionRange(pos, pos);
+                        });
+                      } else {
+                        setDraft(draft + emoji);
+                      }
+                    }}
+                  />
+                )}
                 <input
                   ref={inputRef}
                   value={draft}

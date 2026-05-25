@@ -954,7 +954,8 @@ export default function ChatUIPage() {
               {tab === "global" && (() => {
                 type FeedItem =
                   | { kind: "post"; id: string; ts: number; post: Post }
-                  | { kind: "reply"; id: string; ts: number; parent: Post; commenter: string; name?: string; text: string; timestamp?: number | string };
+                  | { kind: "reply"; id: string; ts: number; parent: Post; commenter: string; name?: string; text: string; timestamp?: number | string }
+                  | { kind: "transfer"; id: string; ts: number; transfer: typeof localTransfers[number] };
                 const items: FeedItem[] = [];
                 posts.forEach((post, pi) => {
                   const pts = Number(post.timestamp || 0) || pi;
@@ -964,11 +965,34 @@ export default function ChatUIPage() {
                     items.push({ kind: "reply", id: `r-${post.id}-${ci}`, ts: cts, parent: post, commenter: c.commenter, name: c.name, text: c.text, timestamp: c.timestamp });
                   });
                 });
+                localTransfers.forEach((t) => items.push({ kind: "transfer", id: t.id, ts: t.ts, transfer: t }));
                 items.sort((a, b) => a.ts - b.ts);
                 const walletLc = wallet.toLowerCase();
                 const myLitName = walletLc ? (namesRef.current[walletLc] || "").toLowerCase() : "";
 
                 return items.map((item) => {
+                  if (item.kind === "transfer") {
+                    const t = item.transfer;
+                    return (
+                      <div key={item.id} className="flex justify-start">
+                        <div className="max-w-[760px] w-fit bg-gradient-to-r from-emerald-950 to-green-900 border-l-4 border-emerald-400 rounded-xl px-4 py-3 text-sm text-brand-text-primary">
+                          <div className="font-medium">
+                            💸 <span className="font-semibold">{t.fromName}</span> sent{" "}
+                            <span className="font-semibold text-emerald-300">{t.amount} {t.token}</span> to{" "}
+                            <span className="font-semibold">{t.toName}</span>
+                          </div>
+                          <a
+                            href={EXPLORER_TX(t.txHash)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1 inline-block text-[11px] text-emerald-300/80 hover:text-emerald-200 hover:underline"
+                          >
+                            View TX ↗
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  }
                   if (item.kind === "post") {
                     const post = item.post;
                     const shortMe = walletLc ? short(wallet).toLowerCase() : "";

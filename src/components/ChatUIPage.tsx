@@ -243,7 +243,7 @@ export default function ChatUIPage() {
   const [inlineBountyActive, setInlineBountyActive] = useState(false);
   const [inlineLikeReward, setInlineLikeReward] = useState("");
   const [inlineTotalBounty, setInlineTotalBounty] = useState("");
-  const [inlineBountyMultiplier, setInlineBountyMultiplier] = useState<number>(1);
+  const [inlineBountyMultiplier, setInlineBountyMultiplier] = useState<string>("");
   const inlineBountyTotal = useMemo(() => {
     const t = Number(inlineTotalBounty || 0);
     return Number.isFinite(t) ? t.toFixed(4) : "0";
@@ -688,7 +688,7 @@ export default function ChatUIPage() {
       setInlineBountyActive(false);
       setInlineLikeReward("");
       setInlineTotalBounty("");
-      setInlineBountyMultiplier(1);
+      setInlineBountyMultiplier("");
       setBountyPopupOpen(false);
       await loadPosts();
     } catch (err) {
@@ -1382,37 +1382,42 @@ export default function ChatUIPage() {
                         min={1}
                         max={1000}
                         step={1}
-                        value={inlineBountyMultiplier}
-                        onKeyDown={(e) => {
-                          if (e.key === "." || e.key === "-" || e.key === "e" || e.key === "E" || e.key === "+") e.preventDefault();
-                        }}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/[^0-9]/g, "");
-                          if (!raw) { setInlineBountyMultiplier(1); return; }
-                          let n = parseInt(raw, 10);
-                          if (!Number.isFinite(n) || n < 1) n = 1;
-                          if (n > 1000) n = 1000;
-                          setInlineBountyMultiplier(n);
-                        }}
+                         value={inlineBountyMultiplier}
+                         placeholder=""
+                         onKeyDown={(e) => {
+                           if (e.key === "." || e.key === "-" || e.key === "e" || e.key === "E" || e.key === "+") e.preventDefault();
+                         }}
+                         onChange={(e) => {
+                           const raw = e.target.value.replace(/[^0-9]/g, "");
+                           setInlineBountyMultiplier(raw);
+                         }}
                         className="flex-1 h-8 px-2 rounded-md bg-brand-bg border border-brand-border text-xs text-brand-text-primary outline-none"
                       />
                     </div>
                     <div className="text-[10px] text-brand-text-muted mb-2">Range: x1 to x1000 — integers only</div>
-                    {(() => {
-                      const per = Number(inlineLikeReward || 0);
-                      const count = Math.max(1, Math.min(1000, Math.floor(inlineBountyMultiplier || 1)));
-                      const total = per > 0 ? per * count : 0;
-                      return (
-                        <div className="text-[11px] text-brand-text-primary mb-2">
-                          Total bounty: <span className="font-semibold text-emerald-400">{total.toFixed(4)} zkLTC</span>
-                          <span className="text-brand-text-muted"> ({count} likes × {per || 0} zkLTC each)</span>
-                        </div>
-                      );
-                    })()}
+                     {(() => {
+                       const per = Number(inlineLikeReward || 0);
+                       const parsed = parseInt(inlineBountyMultiplier, 10);
+                       const hasCount = Number.isFinite(parsed) && parsed > 0;
+                       const count = hasCount ? Math.max(1, Math.min(1000, parsed)) : 0;
+                       const total = per > 0 && count > 0 ? per * count : 0;
+                       return (
+                         <div className="text-[11px] text-brand-text-primary mb-2">
+                           Total bounty: <span className="font-semibold text-emerald-400">{total.toFixed(4)} zkLTC</span>
+                           <span className="text-brand-text-muted"> ({count} likes × {per || 0} zkLTC each)</span>
+                         </div>
+                       );
+                     })()}
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         const per = Number(inlineLikeReward || 0);
-                        const count = Math.max(1, Math.min(1000, Math.floor(inlineBountyMultiplier || 1)));
+                        const parsed = parseInt(inlineBountyMultiplier, 10);
+                        if (!Number.isFinite(parsed) || parsed <= 0) {
+                          try { (await import("sonner")).toast.error("Enter number of likes (1-1000)"); } catch { /* ignore */ }
+                          return;
+                        }
+                        const count = Math.max(1, Math.min(1000, parsed));
+                        setInlineBountyMultiplier(String(count));
                         if (per <= 0) return;
                         const total = per * count;
                         setInlineTotalBounty(total.toString());
@@ -1429,7 +1434,7 @@ export default function ChatUIPage() {
                           setInlineBountyActive(false);
                           setInlineLikeReward("");
                           setInlineTotalBounty("");
-                          setInlineBountyMultiplier(1);
+                          setInlineBountyMultiplier("");
                           setBountyPopupOpen(false);
                         }}
                         className="mt-2 w-full h-7 rounded-md border border-brand-border text-[11px] text-brand-text-muted hover:text-brand-text-primary"
@@ -1449,7 +1454,7 @@ export default function ChatUIPage() {
                         setInlineBountyActive(false);
                         setInlineLikeReward("");
                         setInlineTotalBounty("");
-                        setInlineBountyMultiplier(1);
+                        setInlineBountyMultiplier("");
                       }}
                       className="absolute right-0.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-emerald-500/30 text-emerald-300 hover:text-white"
                     >

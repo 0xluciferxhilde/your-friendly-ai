@@ -1816,75 +1816,257 @@ export default function ChatUIPage() {
 
       {view === "market" && (
         <div className="fixed inset-0 z-[90] bg-brand-bg overflow-y-auto">
-          <div className="max-w-3xl mx-auto p-6">
-            <div className="flex items-center justify-between mb-6">
+          <div className="max-w-5xl mx-auto p-6 pb-32">
+            <div className="flex items-center mb-6">
               <button onClick={() => setView("chat")} className="text-sm text-brand-text-muted hover:text-brand-text-primary">← Back</button>
-              <div className="text-xs text-brand-text-muted">/market</div>
+              <h1 className="ml-4 text-xl font-semibold text-brand-text-primary">.lit Domain Market</h1>
             </div>
-            <h1 className="text-xl font-semibold text-brand-text-primary mb-4">.lit Domain Market</h1>
 
-            <div className="rounded-lg border border-brand-border bg-brand-surface p-4 mb-6">
-              <div className="text-sm font-semibold text-brand-text-primary mb-2">List your domain</div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input value={listName} onChange={(e) => setListName(e.target.value)} placeholder="yourname.lit" className="flex-1 h-10 px-3 rounded-md bg-brand-bg border border-brand-border text-sm text-brand-text-primary outline-none" />
-                <input value={listPrice} onChange={(e) => setListPrice(e.target.value)} placeholder="Price in zkLTC" className="w-full sm:w-44 h-10 px-3 rounded-md bg-brand-bg border border-brand-border text-sm text-brand-text-primary outline-none" />
-                <button
-                  disabled={busy || !listName.trim() || !listPrice.trim()}
-                  onClick={async () => {
-                    setBusy(true);
-                    try {
-                      const r = await fetch(`${API}/hub/market/list`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ name: listName.trim(), price: listPrice.trim(), seller: wallet }),
-                      });
-                      if (!r.ok) throw new Error("List failed");
-                      setListName(""); setListPrice("");
-                      await loadListings();
-                    } catch (err: any) {
-                      try { (await import("sonner")).toast.error(err?.message || "List failed"); } catch { /* ignore */ }
-                    } finally { setBusy(false); }
-                  }}
-                  className="h-10 px-4 rounded-md bg-brand-teal text-brand-bg text-sm font-semibold disabled:opacity-50"
-                >
-                  List for Sale
-                </button>
+            {/* SECTION 1 — My Domains */}
+            <div className="mb-8">
+              <div className="text-sm font-semibold text-brand-text-primary mb-3">
+                You own <span className="text-emerald-400">{myDomains.length}</span> .lit domain{myDomains.length === 1 ? "" : "s"}
               </div>
+              {myDomains.length === 0 ? (
+                <div className="text-xs text-brand-text-muted">No domains owned</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {myDomains.map((d) => {
+                    const existing = listingsFull.find((l) => l.name === d && l.seller?.toLowerCase() === wallet.toLowerCase());
+                    return (
+                      <div key={d} className="rounded-xl border border-brand-border bg-brand-surface p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-xs font-semibold text-emerald-300">{d}</span>
+                          <span className="text-[11px] text-brand-text-muted">{existing ? `Listed for ${existing.price} zkLTC` : "Not listed"}</span>
+                        </div>
+                        {!existing ? (
+                          <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                            <input
+                              value={listPriceFor[d] || ""}
+                              onChange={(e) => setListPriceFor((p) => ({ ...p, [d]: e.target.value }))}
+                              placeholder="Price (zkLTC)"
+                              className="flex-1 h-9 px-3 rounded-md bg-brand-bg border border-brand-border text-sm text-brand-text-primary outline-none"
+                            />
+                            <button
+                              disabled={busy || !(listPriceFor[d] || "").trim()}
+                              onClick={async () => {
+                                setBusy(true);
+                                try {
+                                  const r = await fetch(`${API}/hub/market/list`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ name: d, price: listPriceFor[d], seller: wallet }),
+                                  });
+                                  if (!r.ok) throw new Error("List failed");
+                                  setListPriceFor((p) => ({ ...p, [d]: "" }));
+                                  await loadListings();
+                                } catch (err: any) {
+                                  try { (await import("sonner")).toast.error(err?.message || "List failed"); } catch { /* ignore */ }
+                                } finally { setBusy(false); }
+                              }}
+                              className="h-9 px-4 rounded-md bg-brand-teal text-brand-bg text-xs font-semibold disabled:opacity-50"
+                            >
+                              List for Sale
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            disabled={busy}
+                            onClick={async () => {
+                              setBusy(true);
+                              try {
+                                const r = await fetch(`${API}/hub/market/unlist`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ name: d, seller: wallet }),
+                                });
+                                if (!r.ok) throw new Error("Unlist failed");
+                                await loadListings();
+                              } catch (err: any) {
+                                try { (await import("sonner")).toast.error(err?.message || "Unlist failed"); } catch { /* ignore */ }
+                              } finally { setBusy(false); }
+                            }}
+                            className="h-9 px-4 rounded-md border border-brand-border text-xs font-semibold text-brand-text-primary hover:bg-white/5 disabled:opacity-50"
+                          >
+                            Unlist
+                          </button>
+                        )}
+                        <div className="flex gap-2 mt-2">
+                          <input
+                            value={transferTo[d] || ""}
+                            onChange={(e) => setTransferTo((p) => ({ ...p, [d]: e.target.value }))}
+                            placeholder="0x… or name.lit"
+                            className="flex-1 h-9 px-3 rounded-md bg-brand-bg border border-brand-border text-sm text-brand-text-primary outline-none"
+                          />
+                          <button
+                            disabled={busy || !(transferTo[d] || "").trim()}
+                            onClick={async () => {
+                              const to = (transferTo[d] || "").trim();
+                              setBusy(true);
+                              try {
+                                const r = await fetch(`${API}/hub/market/transfer`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ name: d, from: wallet, to }),
+                                });
+                                if (!r.ok) throw new Error("Transfer failed");
+                                setTransferTo((p) => ({ ...p, [d]: "" }));
+                                await loadMyDomains();
+                              } catch (err: any) {
+                                try { (await import("sonner")).toast.error(err?.message || "Transfer failed"); } catch { /* ignore */ }
+                              } finally { setBusy(false); }
+                            }}
+                            className="h-9 px-4 rounded-md bg-sky-500 text-white text-xs font-semibold disabled:opacity-50"
+                          >
+                            Send
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            <div className="space-y-2">
-              {listings.length === 0 && <div className="text-sm text-brand-text-muted text-center py-6">No listings yet</div>}
-              {listings.map((l) => (
-                <div key={`${l.name}-${l.seller}`} className="rounded-lg border border-brand-border bg-brand-surface px-3 py-3 flex items-center gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold text-brand-text-primary truncate">{l.name}</div>
-                    <div className="text-[11px] text-brand-text-muted truncate">Seller: {short(l.seller)}</div>
-                  </div>
-                  <div className="text-sm font-semibold text-emerald-400 whitespace-nowrap">{l.price} zkLTC</div>
+            {/* SECTION 2 — Market Listings */}
+            <div className="mb-8">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <div className="text-sm font-semibold text-brand-text-primary mr-2">Market Listings</div>
+                {([["all","All"],["latest","Latest"],["low","Low to High"],["high","High to Low"],["sold","Recently Sold"]] as const).map(([k, lbl]) => (
                   <button
-                    disabled={busy || !wallet || l.seller?.toLowerCase() === wallet.toLowerCase()}
-                    onClick={async () => {
-                      setBusy(true);
-                      try {
-                        const r = await fetch(`${API}/hub/market/buy`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ name: l.name, buyer: wallet }),
-                        });
-                        if (!r.ok) throw new Error("Buy failed");
-                        await loadListings();
-                      } catch (err: any) {
-                        try { (await import("sonner")).toast.error(err?.message || "Buy failed"); } catch { /* ignore */ }
-                      } finally { setBusy(false); }
-                    }}
-                    className="h-8 px-3 rounded-md bg-brand-teal text-brand-bg text-xs font-semibold disabled:opacity-50"
+                    key={k}
+                    onClick={() => setMarketFilter(k as any)}
+                    className={cn(
+                      "px-3 h-7 rounded-full text-[11px] font-semibold transition-colors",
+                      marketFilter === k ? "bg-white text-brand-bg" : "border border-brand-border text-brand-text-muted hover:text-brand-text-primary"
+                    )}
                   >
-                    Buy
+                    {lbl}
                   </button>
+                ))}
+              </div>
+
+              {marketFilter === "sold" ? (
+                <div className="space-y-2">
+                  {soldItems.length === 0 && <div className="text-sm text-brand-text-muted text-center py-6">No recent sales</div>}
+                  {soldItems.map((s, i) => (
+                    <div key={`${s.domain}-${i}`} className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-brand-text-primary">
+                      <span className="font-semibold">{short(s.buyer)}</span> bought <span className="font-semibold text-emerald-300">{s.domain}</span> from <span className="font-semibold">{short(s.seller)}</span> for <span className="font-semibold text-emerald-300">{s.price} zkLTC</span>
+                      <span className="ml-2 text-[11px] text-brand-text-muted">{displayTime(s.soldAt)}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(() => {
+                    const sorted = [...listingsFull];
+                    if (marketFilter === "latest") sorted.sort((a, b) => b.listedAt - a.listedAt);
+                    else if (marketFilter === "low") sorted.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+                    else if (marketFilter === "high") sorted.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
+                    return sorted.length === 0 ? (
+                      <div className="col-span-full text-sm text-brand-text-muted text-center py-6">No listings yet</div>
+                    ) : sorted.map((l) => {
+                      const cardBids = bids[l.name] || [];
+                      const isMine = l.seller?.toLowerCase() === wallet.toLowerCase();
+                      return (
+                        <div key={`${l.name}-${l.seller}`} className="rounded-xl border border-brand-border bg-brand-surface p-4 hover:shadow-2xl hover:shadow-emerald-500/10 transition-shadow">
+                          <div className="text-[11px] text-emerald-400 font-bold tracking-wider">.LIT</div>
+                          <div className="text-lg font-semibold text-brand-text-primary mt-1">{l.name}</div>
+                          <div className="text-[11px] text-brand-text-muted mt-1">seller: {short(l.seller)}</div>
+                          <div className="text-2xl font-bold text-emerald-400 mt-3">{l.price} zkLTC</div>
+                          <div className="flex gap-2 mt-3">
+                            <button
+                              disabled={busy || !wallet || isMine}
+                              onClick={async () => {
+                                setBusy(true);
+                                try {
+                                  const r = await fetch(`${API}/hub/market/buy`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ name: l.name, buyer: wallet, price: l.price }),
+                                  });
+                                  if (!r.ok) throw new Error("Buy failed");
+                                  setSendToast(`✅ You bought ${l.name}!`);
+                                  setTimeout(() => setSendToast(null), 4000);
+                                  await loadListings();
+                                  await loadSold();
+                                  await loadMyDomains();
+                                } catch (err: any) {
+                                  try { (await import("sonner")).toast.error(err?.message || "Buy failed"); } catch { /* ignore */ }
+                                } finally { setBusy(false); }
+                              }}
+                              className="flex-1 h-9 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold disabled:opacity-40"
+                            >
+                              BUY NOW
+                            </button>
+                            <button
+                              disabled={busy || isMine}
+                              onClick={() => setBidInputs((p) => ({ ...p, [l.name]: p[l.name] ?? "" }))}
+                              className="flex-1 h-9 rounded-md border border-brand-border text-xs font-bold text-brand-text-primary hover:bg-white/5 disabled:opacity-40"
+                            >
+                              PLACE BID
+                            </button>
+                          </div>
+                          {bidInputs[l.name] !== undefined && (
+                            <div className="flex gap-2 mt-2">
+                              <input
+                                value={bidInputs[l.name]}
+                                onChange={(e) => setBidInputs((p) => ({ ...p, [l.name]: e.target.value }))}
+                                placeholder="Enter bid amount (zkLTC)"
+                                className="flex-1 h-8 px-2 rounded-md bg-brand-bg border border-brand-border text-xs text-brand-text-primary outline-none"
+                              />
+                              <button
+                                disabled={busy || !(bidInputs[l.name] || "").trim() || parseFloat(bidInputs[l.name]) <= 0}
+                                onClick={async () => {
+                                  const amount = bidInputs[l.name];
+                                  setBusy(true);
+                                  try {
+                                    const r = await fetch(`${API}/hub/market/bid`, {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ domain: l.name, bidder: wallet, amount }),
+                                    });
+                                    if (!r.ok) throw new Error("Bid failed");
+                                    setBids((p) => ({ ...p, [l.name]: [...(p[l.name] || []), { bidder: wallet, amount }] }));
+                                    setBidInputs((p) => { const n = { ...p }; delete n[l.name]; return n; });
+                                  } catch (err: any) {
+                                    try { (await import("sonner")).toast.error(err?.message || "Bid failed"); } catch { /* ignore */ }
+                                  } finally { setBusy(false); }
+                                }}
+                                className="h-8 px-3 rounded-md bg-sky-500 text-white text-xs font-bold disabled:opacity-40"
+                              >Submit</button>
+                            </div>
+                          )}
+                          {cardBids.length > 0 && (
+                            <div className="mt-3 space-y-1 border-t border-brand-border pt-2">
+                              {cardBids.map((b, i) => (
+                                <div key={i} className="text-[11px] text-brand-text-muted">
+                                  <span className="font-semibold text-brand-text-primary">{short(b.bidder)}</span> bid <span className="text-emerald-400 font-semibold">{b.amount} zkLTC</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
             </div>
           </div>
+
+          {/* SECTION 3 — Recently Sold ticker */}
+          {soldItems.length > 0 && (
+            <div className="fixed bottom-0 left-0 right-0 z-[91] bg-emerald-500/10 border-t border-emerald-500/30 overflow-hidden">
+              <div className="flex gap-8 whitespace-nowrap py-2 px-4 animate-[marquee_30s_linear_infinite] text-[11px] text-emerald-300">
+                {soldItems.slice(0, 5).map((s, i) => (
+                  <span key={i}>
+                    <span className="font-semibold">{s.domain}</span> sold for <span className="font-semibold">{s.price} zkLTC</span> · {displayTime(s.soldAt)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

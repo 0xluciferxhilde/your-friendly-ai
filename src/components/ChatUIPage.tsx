@@ -1309,9 +1309,10 @@ export default function ChatUIPage() {
                           )}
                         >
                           {post.bountyActive && <div className="absolute right-3 top-3 text-emerald-400" title="Bounty active">💰</div>}
-                          {post.pending && <div className="absolute right-3 top-3 text-[10px] text-brand-text-muted">pending…</div>}
+                          {post.pending && <div className="absolute right-3 top-3 text-[10px] text-brand-text-muted">sending…</div>}
 
                           {/* Discord-style hover action bar */}
+                          {!post.pending && (
                           <div className="absolute -top-4 right-4 z-10 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                             <div className="flex items-center gap-0.5 rounded-full border border-brand-border bg-brand-surface-2 px-1 py-1 shadow-lg">
                               <button
@@ -1346,6 +1347,7 @@ export default function ChatUIPage() {
                               </button>
                             </div>
                           </div>
+                          )}
 
                           <div className="flex items-center gap-2 pr-8">
                             <Avatar name={post.name || post.author} size={34} />

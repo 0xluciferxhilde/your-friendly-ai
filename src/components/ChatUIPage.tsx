@@ -733,6 +733,112 @@ export default function ChatUIPage() {
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
   };
 
+  // Fetch quoted-reply parent posts not already loaded
+  useEffect(() => {
+    if (tab !== "global") return;
+    const need = new Set<string>();
+    for (const p of posts) {
+      const m = (p.content || "").match(REPLY_ID_RE);
+      if (m) {
+        const id = m[1];
+        if (!posts.find((pp) => pp.id === id) && !fetchedReplyPosts[id]) need.add(id);
+      }
+    }
+    if (need.size === 0) return;
+    (async () => {
+      const updates: Record<string, { id: string; author: string; name?: string; content: string }> = {};
+      for (const id of need) {
+        try {
+          const r = await fetch(`${API}/hub/posts/${id}`);
+          const j = await r.json();
+          const p = j.post || j.data || j;
+          if (!p) continue;
+          const author = p.author || p.wallet || p.walletAddress || p.from || p.creator || "";
+          const name = p.name || p.litName || p.creatorName || (author ? await resolveName(author) : "");
+          updates[id] = { id, author, name, content: p.content || p.message || p.text || "" };
+        } catch { /* ignore */ }
+      }
+      if (Object.keys(updates).length) setFetchedReplyPosts((prev) => ({ ...prev, ...updates }));
+    })();
+  }, [posts, fetchedReplyPosts, resolveName, tab]);
+
+  // Send-panel: balance fetch
+  const fetchSendBalance = useCallback(async () => {
+    if (!wallet) { setSendBalance("0"); return; }
+    const token = TOKENS[sendTokenKey];
+    if (!token) { setSendBalance("0"); return; }
+    try {
+      if (token.address === null) {
+        const r = await fetch(RPC_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [wallet, "latest"] }),
+        });
+        const j = await r.json();
+        setSendBalance(formatUnitsStr(BigInt(j.result || "0x0"), 18));
+      } else {
+        const data = "0x70a08231" + addressHex(wallet);
+        const res = await readContract(token.address, data);
+        setSendBalance(formatUnitsStr(BigInt(res || "0x0"), token.decimals));
+      }
+    } catch { setSendBalance("0"); }
+  }, [wallet, sendTokenKey, readContract]);
+
+  useEffect(() => { if (sendPanelOpen) fetchSendBalance(); }, [sendPanelOpen, fetchSendBalance]);
+
+  useEffect(() => {
+    if (!sendPanelOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSendPanelOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sendPanelOpen]);
+
+  const executeSend = async () => {
+    const amount = sendAmount.trim();
+    const recipient = sendRecipient.trim();
+    if (!amount || !recipient) { alert("Enter amount and recipient"); return; }
+    const token = TOKENS[sendTokenKey];
+    if (!token) return;
+    setBusy(true);
+    try {
+      let to = recipient;
+      let toName = recipient;
+      if (!recipient.startsWith("0x")) {
+        const r = await fetch(`${API}/hub/resolve/${encodeURIComponent(recipient)}`);
+        const j = await r.json();
+        to = j?.address || j?.wallet || j?.walletAddress || j?.data?.address;
+        if (!to) throw new Error(`Could not resolve ${recipient}`);
+      } else {
+        toName = short(recipient);
+      }
+      let txHash: string;
+      if (token.address === null) {
+        txHash = await writeContract(to, "0x", parseUnitsStr(amount, 18));
+      } else {
+        const data = ERC20_TRANSFER_SELECTOR + addressHex(to) + uintHex(parseUnitsStr(amount, token.decimals));
+        txHash = await writeContract(token.address, data, 0n);
+      }
+      const fromName = namesRef.current[wallet.toLowerCase()] || short(wallet);
+      const now = Date.now();
+      setLocalTransfers((prev) => [...prev, {
+        id: `tx-${txHash}`,
+        ts: Math.floor(now / 1000),
+        from: wallet, fromName,
+        to, toName,
+        amount, token: token.symbol,
+        txHash, createdAt: now,
+      }]);
+      setSendToast(`✅ Sent ${amount} ${token.symbol} to ${toName}!`);
+      setTimeout(() => setSendToast(null), 4000);
+      setSendPanelOpen(false);
+      setSendAmount("");
+      setSendRecipient("");
+    } catch (err: any) {
+      console.error("[ChatUI] executeSend error:", err);
+      alert(err?.message || "Send failed");
+    } finally { setBusy(false); }
+  };
+
   const filtered = contacts.filter((c) => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.address.toLowerCase().includes(search.toLowerCase()));
   const showChat = tab === "global" || !!current;
   const headerName = tab === "global" ? "Global" : current?.name || "Select a chat";

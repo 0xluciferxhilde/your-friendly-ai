@@ -1350,14 +1350,21 @@ export default function ChatUIPage() {
                 <input
                   ref={inputRef}
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (tab === "global" && v === "/") {
+                      setDraft("");
+                      setSendPanelOpen(true);
+                      return;
+                    }
+                    setDraft(v);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       if (tab === "global") sendGlobal();
                       else sendPrivate();
                     } else if (e.key === "Escape") {
-                      if (draft.trimStart().toLowerCase().startsWith("/send")) setDraft("");
-                      else if (replyTo) setReplyTo(null);
+                      if (replyTo) setReplyTo(null);
                     }
                   }}
                   disabled={!showChat || busy}

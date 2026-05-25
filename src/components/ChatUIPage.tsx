@@ -640,10 +640,10 @@ export default function ChatUIPage() {
     const content = replyTo
       ? `[replyTo:${replyTo.postId}] @${replyTo.name || short(replyTo.authorAddr)} ${body}`
       : body;
-    const useBounty = inlineBountyActive && (Number(inlineLikeReward || 0) > 0 || Number(inlineCommentReward || 0) > 0);
+    const useBounty = inlineBountyActive && Number(inlineLikeReward || 0) > 0 && Number(inlineTotalBounty || 0) > 0;
     const likeWei = useBounty ? parseAmount(inlineLikeReward || "0") : 0n;
-    const commentWei = useBounty ? parseAmount(inlineCommentReward || "0") : 0n;
-    const budgetWei = useBounty ? (likeWei + commentWei) : 0n;
+    const commentWei = 0n;
+    const budgetWei = useBounty ? parseAmount(inlineTotalBounty || "0") : 0n;
     setBusy(true);
     try {
       await writeContract(
@@ -659,7 +659,7 @@ export default function ChatUIPage() {
       setReplyTo(null);
       setInlineBountyActive(false);
       setInlineLikeReward("");
-      setInlineCommentReward("");
+      setInlineTotalBounty("");
       setBountyPopupOpen(false);
       await loadPosts();
     } finally { setBusy(false); }

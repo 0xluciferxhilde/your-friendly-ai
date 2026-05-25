@@ -1205,8 +1205,9 @@ export default function ChatUIPage() {
                     if (e.key === "Enter") {
                       if (tab === "global") sendGlobal();
                       else sendPrivate();
-                    } else if (e.key === "Escape" && replyTo) {
-                      setReplyTo(null);
+                    } else if (e.key === "Escape") {
+                      if (draft.trimStart().toLowerCase().startsWith("/send")) setDraft("");
+                      else if (replyTo) setReplyTo(null);
                     }
                   }}
                   disabled={!showChat || busy}

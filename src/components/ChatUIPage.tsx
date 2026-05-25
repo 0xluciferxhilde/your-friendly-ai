@@ -64,6 +64,10 @@ const TOKENS: Record<string, { address: string | null; decimals: number; symbol:
   CHAWLEE: { address: "0x05149f41AFE7ca712D6A42390e8047E0f2887284", decimals: 18, symbol: "CHAWLEE" },
 };
 const SEND_CMD_RE = /^\s*send\s+([\d]+(?:\.\d+)?)\s+([A-Za-z][\w.]*)\s+to\s+([\w-]+\.lit)\s*$/i;
+const SENT_DISPLAY_RE = /^💸\s*Sent\s+([\d]+(?:\.\d+)?)\s+([A-Za-z][\w.]*)\s+to\s+([\w-]+\.lit)/i;
+const SLASH_SEND_FULL_RE = /^\s*\/send\s+([A-Za-z][\w.]*)\s+([\d]+(?:\.\d+)?)\s+to\s+([\w-]+\.lit)\s*$/i;
+const REPLY_TAG_RE = /^@(0x[a-fA-F0-9]{2,8}(?:\.{2,3}[a-fA-F0-9]{2,8})?|[\w-]+\.lit)\s+/;
+const TOKEN_LIST = ["ZKLTC","USDC","USDT","PEPE","WETH","WBTC","LDEX","ZKPEPE","ZKETH","LDTOAD","USDC.T","YURI","CHAWLEE","LESTER"];
 const parseUnitsStr = (value: string, decimals: number) => {
   const [whole = "0", fraction = ""] = value.trim().split(".");
   const frac = (fraction + "0".repeat(decimals)).slice(0, decimals);
@@ -217,6 +221,7 @@ export default function ChatUIPage() {
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [bountyPopupOpen, setBountyPopupOpen] = useState(false);
   const [bountyToast, setBountyToast] = useState<{ amount: string; name: string } | null>(null);
+  const [sendToast, setSendToast] = useState<string | null>(null);
   const [inlineBountyActive, setInlineBountyActive] = useState(false);
   const [inlineLikeReward, setInlineLikeReward] = useState("");
   const [inlineCommentReward, setInlineCommentReward] = useState("");
@@ -562,7 +567,7 @@ export default function ChatUIPage() {
       const data = ERC20_TRANSFER_SELECTOR + addressHex(to) + uintHex(parseUnitsStr(amount, token.decimals));
       await writeContract(token.address, data, 0n);
     }
-    const content = `send ${amount} ${token.symbol} to ${litName}`;
+    const content = `💸 Sent ${amount} ${token.symbol} to ${litName}`;
     await writeContract(
       HUB_POSTS_ADDRESS,
       encodeCall(SELECTOR.createPost, [
@@ -608,11 +613,18 @@ export default function ChatUIPage() {
   const sendGlobal = async () => {
     const body = draft.trim();
     if (!body) return;
-    const sendMatch = body.match(SEND_CMD_RE);
-    if (sendMatch) {
+    const slashMatch = body.match(SLASH_SEND_FULL_RE);
+    const sendMatch = !slashMatch ? body.match(SEND_CMD_RE) : null;
+    if (slashMatch || sendMatch) {
+      const [amount, tokenSym, litName] = slashMatch
+        ? [slashMatch[2], slashMatch[1], slashMatch[3]]
+        : [sendMatch![1], sendMatch![2], sendMatch![3]];
       setBusy(true);
       try {
-        await sendTokenCommand(sendMatch[1], sendMatch[2], sendMatch[3]);
+        await sendTokenCommand(amount, tokenSym, litName);
+        const sym = TOKENS[tokenSym.toUpperCase()]?.symbol || tokenSym;
+        setSendToast(`✅ Sent ${amount} ${sym} to ${litName}!`);
+        setTimeout(() => setSendToast(null), 4000);
         setDraft("");
         setReplyTo(null);
       } catch (err: any) {
@@ -862,7 +874,7 @@ export default function ChatUIPage() {
                       (myLitName && contentLc.includes(`@${myLitName}`))
                     );
                     const isHighlighted = highlightedId === post.id;
-                    const sendMatch = (post.content || "").match(SEND_CMD_RE);
+                    const sendMatch = (post.content || "").match(SENT_DISPLAY_RE) || (post.content || "").match(SEND_CMD_RE);
                     if (sendMatch) {
                       const senderName = post.name || short(post.author);
                       return (
@@ -950,7 +962,39 @@ export default function ChatUIPage() {
                               )}
                             </div>
                           </div>
-                          <div className="mt-2 whitespace-pre-wrap break-words leading-relaxed">{renderPostContent(post.content)}</div>
+                          {(() => {
+                            const replyMatch = (post.content || "").match(REPLY_TAG_RE);
+                            if (!replyMatch) {
+                              return <div className="mt-2 whitespace-pre-wrap break-words leading-relaxed">{renderPostContent(post.content)}</div>;
+                            }
+                            const tagBody = replyMatch[1].toLowerCase();
+                            const replyBody = post.content.slice(replyMatch[0].length);
+                            const original = posts.find((p) =>
+                              short(p.author).toLowerCase() === tagBody ||
+                              p.author.toLowerCase() === tagBody ||
+                              (p.name || "").toLowerCase() === tagBody
+                            );
+                            const previewName = original ? (original.name || short(original.author)) : replyMatch[1];
+                            const previewText = original ? original.content : "Original post not found";
+                            const previewShort = previewText.length > 100 ? `${previewText.slice(0, 100)}…` : previewText;
+                            return (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => original && scrollToPost(original.id)}
+                                  disabled={!original}
+                                  className="mt-2 block w-full text-left pl-2 pr-2 py-1.5 border-l-4 border-gray-400 bg-gray-700/40 rounded-r-md hover:bg-gray-700/60 transition-colors disabled:cursor-default"
+                                >
+                                  <div className="flex items-center gap-1.5 text-[11px] text-brand-text-muted truncate">
+                                    <Avatar name={previewName} size={14} />
+                                    <span className="font-medium">{previewName}</span>
+                                  </div>
+                                  <div className="text-[12px] text-brand-text-muted/90 truncate mt-0.5">{previewShort}</div>
+                                </button>
+                                <div className="mt-2 whitespace-pre-wrap break-words leading-relaxed">{renderPostContent(replyBody)}</div>
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     );
@@ -1016,6 +1060,61 @@ export default function ChatUIPage() {
                   </button>
                 </div>
               )}
+              {tab === "global" && draft.trimStart().toLowerCase().startsWith("/send") && (() => {
+                const parts = draft.trim().split(/\s+/);
+                // parts[0] = /send; parts[1] = token; parts[2] = amount; parts[3] = "to"; parts[4] = recipient
+                const tokenPart = parts[1];
+                const hasToken = !!tokenPart && !!TOKENS[tokenPart.toUpperCase()];
+                const hasAmount = hasToken && !!parts[2] && /^\d+(\.\d+)?$/.test(parts[2]);
+                const step = !hasToken ? 1 : !hasAmount ? 2 : 3;
+                return (
+                  <div className="mx-2 mb-2 rounded-xl border border-gray-700 bg-gray-900 shadow-2xl p-3">
+                    <div className="flex items-center justify-between mb-2 text-[11px] font-semibold">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("px-2 py-0.5 rounded", step === 1 ? "bg-sky-500 text-white" : "text-brand-text-muted")}>1. Token</span>
+                        <span className="text-brand-text-muted">→</span>
+                        <span className={cn("px-2 py-0.5 rounded", step === 2 ? "bg-sky-500 text-white" : "text-brand-text-muted")}>2. Amount</span>
+                        <span className="text-brand-text-muted">→</span>
+                        <span className={cn("px-2 py-0.5 rounded", step === 3 ? "bg-sky-500 text-white" : "text-brand-text-muted")}>3. Recipient</span>
+                      </div>
+                      <button
+                        onClick={() => setDraft("")}
+                        aria-label="Close"
+                        className="p-1 rounded hover:bg-white/10 text-brand-text-muted hover:text-brand-text-primary"
+                      ><X size={12} /></button>
+                    </div>
+                    {step === 1 && (
+                      <>
+                        <div className="text-[11px] text-brand-text-muted mb-2">Select a token</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {TOKEN_LIST.map((k) => {
+                            const t = TOKENS[k];
+                            return (
+                              <button
+                                key={k}
+                                type="button"
+                                onClick={() => {
+                                  setDraft(`/send ${t.symbol} `);
+                                  setTimeout(() => inputRef.current?.focus(), 0);
+                                }}
+                                className="rounded-full px-3 py-1 bg-gray-800 hover:bg-gray-700 text-xs text-brand-text-primary border border-gray-700"
+                              >
+                                {t.symbol}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                    {step === 2 && (
+                      <div className="text-xs text-brand-text-primary">Enter amount of <span className="font-semibold text-sky-400">{TOKENS[tokenPart.toUpperCase()].symbol}</span></div>
+                    )}
+                    {step === 3 && (
+                      <div className="text-xs text-brand-text-primary">Enter recipient .lit name (e.g. <span className="font-mono text-sky-400">to alice.lit</span>)</div>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="relative flex items-center gap-1 px-2 py-2">
                 <IconBtn aria-label="Emoji"><Smile size={18} /></IconBtn>
                 <IconBtn aria-label="Attach"><Paperclip size={18} /></IconBtn>
@@ -1106,8 +1205,9 @@ export default function ChatUIPage() {
                     if (e.key === "Enter") {
                       if (tab === "global") sendGlobal();
                       else sendPrivate();
-                    } else if (e.key === "Escape" && replyTo) {
-                      setReplyTo(null);
+                    } else if (e.key === "Escape") {
+                      if (draft.trimStart().toLowerCase().startsWith("/send")) setDraft("");
+                      else if (replyTo) setReplyTo(null);
                     }
                   }}
                   disabled={!showChat || busy}
@@ -1158,6 +1258,12 @@ export default function ChatUIPage() {
       {bountyToast && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-yellow-500/90 text-black rounded-xl px-6 py-3 shadow-xl font-bold text-sm pointer-events-none">
           🎉 You received {bountyToast.amount} zkLTC like bounty from @{bountyToast.name}!
+        </div>
+      )}
+
+      {sendToast && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-emerald-500/95 text-black rounded-xl px-6 py-3 shadow-xl font-bold text-sm pointer-events-none">
+          {sendToast}
         </div>
       )}
     </div>

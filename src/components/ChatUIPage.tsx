@@ -443,10 +443,21 @@ export default function ChatUIPage() {
         };
       }));
       console.log("[ChatUI] mapped posts:", mapped);
-      setPosts(mapped);
+      setPosts((prev) => {
+        const pendingPosts = prev.filter((p) => p.pending);
+        const realPrev = prev.filter((p) => !p.pending);
+        const sameLen = realPrev.length === mapped.length;
+        const sameTop = sameLen && realPrev[0]?.id === mapped[0]?.id && realPrev[realPrev.length - 1]?.id === mapped[mapped.length - 1]?.id;
+        if (sameLen && sameTop && pendingPosts.length === 0) return prev;
+        // Drop pending posts whose content now appears in real list (by content match)
+        const remainingPending = pendingPosts.filter((pp) => !mapped.some((m) => m.author?.toLowerCase() === pp.author?.toLowerCase() && m.content === pp.content));
+        return [...mapped, ...remainingPending];
+      });
     } catch (err) {
       console.error("[ChatUI] loadPosts error:", err);
-      setPosts([]);
+      setPosts((prev) => (prev.length === 0 ? prev : prev));
+    } finally {
+      setPostsLoading(false);
     }
   }, [resolveName, wallet]);
 
@@ -502,7 +513,7 @@ export default function ChatUIPage() {
   useEffect(() => {
     if (tab === "global") {
       loadPosts();
-      const id = setInterval(loadPosts, 15_000);
+      const id = setInterval(loadPosts, 10_000);
       return () => clearInterval(id);
     }
     loadPrivate();

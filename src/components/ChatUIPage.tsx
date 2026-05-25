@@ -67,11 +67,19 @@ const SEND_CMD_RE = /^\s*send\s+([\d]+(?:\.\d+)?)\s+([A-Za-z][\w.]*)\s+to\s+([\w
 const SENT_DISPLAY_RE = /^💸\s*Sent\s+([\d]+(?:\.\d+)?)\s+([A-Za-z][\w.]*)\s+to\s+([\w-]+\.lit)/i;
 const SLASH_SEND_FULL_RE = /^\s*\/send\s+([A-Za-z][\w.]*)\s+([\d]+(?:\.\d+)?)\s+to\s+([\w-]+\.lit)\s*$/i;
 const REPLY_TAG_RE = /^@(0x[a-fA-F0-9]{2,8}(?:\.{2,3}[a-fA-F0-9]{2,8})?|[\w-]+\.lit)\s+/;
+const REPLY_ID_RE = /^\[replyTo:([^\]]+)\]\s*/;
+const EXPLORER_TX = (hash: string) => `https://liteforge.explorer.caldera.xyz/tx/${hash}`;
 const TOKEN_LIST = ["ZKLTC","USDC","USDT","PEPE","WETH","WBTC","LDEX","ZKPEPE","ZKETH","LDTOAD","USDC.T","YURI","CHAWLEE","LESTER"];
 const parseUnitsStr = (value: string, decimals: number) => {
   const [whole = "0", fraction = ""] = value.trim().split(".");
   const frac = (fraction + "0".repeat(decimals)).slice(0, decimals);
   return BigInt(whole || "0") * 10n ** BigInt(decimals) + BigInt(frac || "0");
+};
+const formatUnitsStr = (value: bigint, decimals: number) => {
+  const s = value.toString().padStart(decimals + 1, "0");
+  const whole = s.slice(0, -decimals);
+  const frac = s.slice(-decimals).replace(/0+$/, "");
+  return frac ? `${whole}.${frac}` : whole;
 };
 
 type Contact = { address: string; name: string; message?: string };

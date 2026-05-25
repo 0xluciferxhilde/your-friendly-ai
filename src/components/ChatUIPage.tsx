@@ -205,6 +205,9 @@ export default function ChatUIPage() {
   const [pending, setPending] = useState<PendingRequest[]>([]);
   const [current, setCurrent] = useState<Contact | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
+  // Optimistic outbound DMs awaiting backend indexing. Kept separate from
+  // server-fetched `messages` so polling never wipes them.
+  const [pendingMsgs, setPendingMsgs] = useState<Array<Msg & { txHash?: string; status?: "sending" | "sent" }>>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
@@ -302,7 +305,7 @@ export default function ChatUIPage() {
   }, [wallet]);
 
   // Reset private messages when switching contact
-  useEffect(() => { setMessages([]); }, [current?.address]);
+  useEffect(() => { setMessages([]); setPendingMsgs([]); }, [current?.address]);
 
   // FIX 5 — load profile data when entering profile view
   useEffect(() => {
@@ -648,8 +651,29 @@ export default function ChatUIPage() {
     try {
       const r = await fetch(`${API}/hub/messenger/conversation/${wallet}/${current.address}`);
       const j = await r.json();
-      setMessages(readArray(j, ["messages", "conversation", "data"]));
-    } catch { setMessages([]); }
+      const serverMsgs = readArray(j, ["messages", "conversation", "data"]) as Msg[];
+      setMessages(serverMsgs);
+      // Drop any optimistic message that is now reflected by the backend.
+      // We match on (sender == me) + same text within a 5-minute window.
+      const myAddr = wallet.toLowerCase();
+      setPendingMsgs((prev) => prev.filter((p) => {
+        const text = getMessageText(p);
+        const ts = Number(p.timestamp || p.ts || 0);
+        return !serverMsgs.some((s) => {
+          const sFrom = (s.from || s.wallet || (s as any).fromWallet || (s as any).sender || "").toString().toLowerCase();
+          if (sFrom !== myAddr) return false;
+          const sText = getMessageText(s);
+          if (sText !== text) return false;
+          const sTs = Number(s.timestamp || s.ts || 0);
+          // Allow generous window because backend timestamps may differ from
+          // the optimistic clock.
+          return !ts || !sTs || Math.abs(sTs - ts) < 600;
+        });
+      }));
+    } catch {
+      // Transient fetch errors must NOT wipe the conversation — keep last
+      // known state so optimistic + previously fetched msgs stay visible.
+    }
   }, [current?.address, wallet]);
 
   useEffect(() => {
@@ -666,6 +690,7 @@ export default function ChatUIPage() {
   useEffect(() => {
     setCurrent(null);
     setMessages([]);
+    setPendingMsgs([]);
     setSearch("");
   }, [tab]);
 
@@ -678,7 +703,7 @@ export default function ChatUIPage() {
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
-  }, [messages, posts, replyTo]);
+  }, [messages, pendingMsgs, posts, replyTo]);
 
   const refreshPost = useCallback(async (postId: string) => {
     try {
@@ -888,27 +913,74 @@ export default function ChatUIPage() {
     } finally { setBusy(false); }
   };
 
+  // Poll for tx receipt; resolves with receipt or null after timeout.
+  const waitForReceipt = useCallback(async (hash: string, timeoutMs = 60_000) => {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const r = await fetch(RPC_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt", params: [hash] }),
+        });
+        const j = await r.json();
+        if (j?.result) return j.result;
+      } catch { /* swallow and retry */ }
+      await new Promise((res) => setTimeout(res, 2000));
+    }
+    return null;
+  }, []);
+
   const sendPrivate = async () => {
     const text = draft.trim();
     if (!text || !current?.address) return;
     const optimisticId = `opt-${Date.now()}`;
-    const optimisticMsg: Msg = {
+    const optimisticMsg: Msg & { status?: "sending" | "sent"; txHash?: string } = {
       id: optimisticId,
       from: wallet,
       to: current.address,
       content: text,
       timestamp: Math.floor(Date.now() / 1000),
+      status: "sending",
     };
-    setMessages((prev) => [...prev, optimisticMsg]);
+    // Stage in the dedicated pending bucket so polling never wipes it.
+    setPendingMsgs((prev) => [...prev, optimisticMsg]);
     setDraft("");
     setBusy(true);
+    let hash: string | null = null;
     try {
-      await writeContract(MESSENGER_ADDRESS, encodeCall(SELECTOR.sendMessage, [{ type: "address", value: current.address }, { type: "string", value: text }, { type: "string", value: "text" }]));
-      await loadConversation();
+      hash = await writeContract(MESSENGER_ADDRESS, encodeCall(SELECTOR.sendMessage, [{ type: "address", value: current.address }, { type: "string", value: text }, { type: "string", value: "text" }]));
+      // Mark optimistic as on-chain submitted.
+      setPendingMsgs((prev) => prev.map((m) => m.id === optimisticId ? { ...m, txHash: hash || undefined, status: "sent" } : m));
     } catch (err) {
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      // User rejected or RPC error — drop the optimistic msg.
+      setPendingMsgs((prev) => prev.filter((m) => m.id !== optimisticId));
       try { (await import("sonner")).toast.error("Failed to send message"); } catch { /* ignore */ }
-    } finally { setBusy(false); }
+      setBusy(false);
+      return;
+    } finally {
+      setBusy(false);
+    }
+
+    // After the wallet returns a tx hash, run a background reconciliation
+    // loop: wait for the chain receipt, then poll the Hub backend every 2s
+    // until it has indexed the new message (which prunes the optimistic
+    // entry inside loadConversation).
+    (async () => {
+      if (hash) await waitForReceipt(hash, 60_000);
+      for (let i = 0; i < 15; i++) {
+        await loadConversation();
+        // Stop early if the optimistic entry was pruned (server caught up).
+        const stillPending = await new Promise<boolean>((resolve) => {
+          setPendingMsgs((prev) => {
+            resolve(prev.some((m) => m.id === optimisticId));
+            return prev;
+          });
+        });
+        if (!stillPending) return;
+        await new Promise((res) => setTimeout(res, 2000));
+      }
+    })().catch(() => { /* swallow */ });
   };
 
   const sendTip = async () => {
@@ -1445,15 +1517,20 @@ export default function ChatUIPage() {
               })()}
 
 
-              {tab === "private" && showChat && [...messages].sort((a, b) => Number(a.timestamp || a.ts || 0) - Number(b.timestamp || b.ts || 0)).map((m, i) => {
+              {tab === "private" && showChat && [...messages, ...pendingMsgs].sort((a, b) => Number(a.timestamp || a.ts || 0) - Number(b.timestamp || b.ts || 0)).map((m, i) => {
                 const fromAddr = (m.from || m.wallet || (m as any).fromWallet || (m as any).sender || "").toString();
                 const mine = fromAddr.toLowerCase() === wallet.toLowerCase();
-                const pending = typeof m.id === "string" && m.id.startsWith("opt-");
+                const isOptimistic = typeof m.id === "string" && m.id.startsWith("opt-");
+                const optStatus = (m as any).status as ("sending" | "sent" | undefined);
                 return (
                   <div key={m.id || i} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                    <div className={cn("max-w-[70%] rounded-lg px-3 py-2 text-sm border", mine ? "bg-white/10 border-white/10 text-brand-text-primary" : "bg-brand-surface border-brand-border text-brand-text-primary", pending && "opacity-60")}>
+                    <div className={cn("max-w-[70%] rounded-lg px-3 py-2 text-sm border", mine ? "bg-white/10 border-white/10 text-brand-text-primary" : "bg-brand-surface border-brand-border text-brand-text-primary", isOptimistic && "opacity-70")}>
                       <div className="break-words whitespace-pre-wrap">{getMessageText(m)}</div>
-                      <div className="mt-1 text-[10px] text-brand-text-muted text-right">{pending ? "sending…" : displayTime(m.timestamp || m.createdAt || m.ts)}</div>
+                      <div className="mt-1 text-[10px] text-brand-text-muted text-right">
+                        {isOptimistic
+                          ? (optStatus === "sent" ? "sent · syncing…" : "sending…")
+                          : displayTime(m.timestamp || m.createdAt || m.ts)}
+                      </div>
                     </div>
                   </div>
                 );

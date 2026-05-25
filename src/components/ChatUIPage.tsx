@@ -557,23 +557,21 @@ export default function ChatUIPage() {
       await writeContract(HUB_POSTS_ADDRESS, encodeCall(SELECTOR.likePost, [{ type: "uint", value: post.postId }]));
       setPosts((list) => list.map((p) => p.id === post.id ? { ...p, liked: true } : p));
       await refreshPost(post.postId);
-      if (post.bountyActive) {
-        try {
-          const r = await fetch(`${API}/hub/posts/${post.postId}`);
-          const j = await r.json();
-          const p = j.post || j.data || j;
-          const rewardRaw = p?.likeReward ?? p?.likeBounty ?? p?.likeRewardWei;
-          if (rewardRaw && BigInt(rewardRaw) > 0n) {
-            const wei = BigInt(rewardRaw);
-            const whole = wei / 10n ** 18n;
-            const frac = (wei % 10n ** 18n).toString().padStart(18, "0").replace(/0+$/, "");
-            const amount = frac ? `${whole}.${frac}` : `${whole}`;
-            const creatorName = post.name || short(post.author);
-            setBountyToast({ amount, name: creatorName });
-            setTimeout(() => setBountyToast(null), 4000);
-          }
-        } catch (err) { console.error("[ChatUI] bounty toast error:", err); }
-      }
+      try {
+        const r = await fetch(`${API}/hub/posts/${post.postId}`);
+        const j = await r.json();
+        const p = j.post || j.data || j;
+        const rewardRaw = p?.likeReward ?? p?.likeBounty ?? p?.likeRewardWei;
+        if (rewardRaw && BigInt(rewardRaw) > 0n) {
+          const wei = BigInt(rewardRaw);
+          const whole = wei / 10n ** 18n;
+          const frac = (wei % 10n ** 18n).toString().padStart(18, "0").replace(/0+$/, "");
+          const amount = frac ? `${whole}.${frac}` : `${whole}`;
+          const creatorName = post.name || short(post.author);
+          setBountyToast({ amount, name: creatorName });
+          setTimeout(() => setBountyToast(null), 4000);
+        }
+      } catch (err) { console.error("[ChatUI] bounty toast error:", err); }
     } finally { setBusy(false); }
   };
 

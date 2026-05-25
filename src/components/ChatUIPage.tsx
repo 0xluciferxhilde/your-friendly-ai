@@ -813,7 +813,7 @@ export default function ChatUIPage() {
                             <div className="min-w-0">
                               <span className="font-semibold">{post.name || short(post.author)}</span>
                               <span className="ml-2 text-xs text-brand-text-muted">{displayTime(post.timestamp)}</span>
-                              <span className="ml-2 text-xs text-brand-text-muted">· ♥ {post.likeCount} · 💬 {post.commentCount}</span>
+                              <span className="ml-2 text-xs text-brand-text-muted">· ♥ {post.likeCount}</span>
                               {post.bountyActive && commentedPosts[post.id] && (
                                 <span className="ml-2 text-[11px] text-emerald-400">✓ Bounty claimed</span>
                               )}

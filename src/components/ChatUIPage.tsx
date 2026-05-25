@@ -46,6 +46,30 @@ const SELECTOR = {
   friendRequests: "0xdc5bd536",
 };
 
+const ERC20_TRANSFER_SELECTOR = "0xa9059cbb";
+const TOKENS: Record<string, { address: string | null; decimals: number; symbol: string }> = {
+  ZKLTC:   { address: null, decimals: 18, symbol: "zkLTC" },
+  USDC:    { address: "0xFC43ABE529CDC61B7F0aa2e677451AFd83d2B304", decimals: 6,  symbol: "USDC" },
+  PEPE:    { address: "0x6858790e164a8761a711BAD1178220C5AebcF7eC", decimals: 18, symbol: "PEPE" },
+  USDT:    { address: "0xa38c318a0B755154b25f28cAD7b2312747B073C6", decimals: 6,  symbol: "USDT" },
+  LESTER:  { address: "0xFC73cdB75F37B0da829c4e54511f410D525B76b2", decimals: 18, symbol: "Lester" },
+  WETH:    { address: "0x68Bf11e64cfD939fE1761012862FBFE47048118e", decimals: 18, symbol: "WETH" },
+  WBTC:    { address: "0xcFe6BE457D366329CCdeE7fBC48aBf1d6FFeB9C0", decimals: 18, symbol: "WBTC" },
+  LDEX:    { address: "0xBAaba603e6298fbb76325a6B0d47Cd57154ca641", decimals: 18, symbol: "LDEX" },
+  ZKPEPE:  { address: "0x314522DD1B3f74Dd1DdE03E5B5a628C28134b25d", decimals: 18, symbol: "zkPEPE" },
+  ZKETH:   { address: "0xaf9F497007342Dd025Ff696964A736Ec9584c3dd", decimals: 18, symbol: "zkETH" },
+  LDTOAD:  { address: "0xF425553A84e579BE353a6180F7d53d8101bfb3E4", decimals: 18, symbol: "LDTOAD" },
+  "USDC.T": { address: "0x60DD65bAd8a73Dfd8DF029C4e3b372d575B03BC2", decimals: 6, symbol: "USDC.t" },
+  YURI:    { address: "0xd8C4e6dBe48472d6C563eB1cc330207d020D4c8f", decimals: 18, symbol: "YURI" },
+  CHAWLEE: { address: "0x05149f41AFE7ca712D6A42390e8047E0f2887284", decimals: 18, symbol: "CHAWLEE" },
+};
+const SEND_CMD_RE = /^\s*send\s+([\d]+(?:\.\d+)?)\s+([A-Za-z][\w.]*)\s+to\s+([\w-]+\.lit)\s*$/i;
+const parseUnitsStr = (value: string, decimals: number) => {
+  const [whole = "0", fraction = ""] = value.trim().split(".");
+  const frac = (fraction + "0".repeat(decimals)).slice(0, decimals);
+  return BigInt(whole || "0") * 10n ** BigInt(decimals) + BigInt(frac || "0");
+};
+
 type Contact = { address: string; name: string; message?: string };
 type Msg = { id?: string | number; from?: string; wallet?: string; to?: string; message?: string; content?: string; text?: string; contentHash?: string; ts?: number; timestamp?: number | string; createdAt?: string };
 type Comment = { commenter: string; text: string; timestamp?: number | string; name?: string };
@@ -192,6 +216,7 @@ export default function ChatUIPage() {
   const postRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [bountyPopupOpen, setBountyPopupOpen] = useState(false);
+  const [bountyToast, setBountyToast] = useState<{ amount: string; name: string } | null>(null);
   const [inlineBountyActive, setInlineBountyActive] = useState(false);
   const [inlineLikeReward, setInlineLikeReward] = useState("");
   const [inlineCommentReward, setInlineCommentReward] = useState("");
@@ -503,7 +528,51 @@ export default function ChatUIPage() {
       await writeContract(HUB_POSTS_ADDRESS, encodeCall(SELECTOR.likePost, [{ type: "uint", value: post.postId }]));
       setPosts((list) => list.map((p) => p.id === post.id ? { ...p, liked: true } : p));
       await refreshPost(post.postId);
+      if (post.bountyActive) {
+        try {
+          const r = await fetch(`${API}/hub/posts/${post.postId}`);
+          const j = await r.json();
+          const p = j.post || j.data || j;
+          const rewardRaw = p?.likeReward ?? p?.likeBounty ?? p?.likeRewardWei;
+          if (rewardRaw && BigInt(rewardRaw) > 0n) {
+            const wei = BigInt(rewardRaw);
+            const whole = wei / 10n ** 18n;
+            const frac = (wei % 10n ** 18n).toString().padStart(18, "0").replace(/0+$/, "");
+            const amount = frac ? `${whole}.${frac}` : `${whole}`;
+            const creatorName = post.name || short(post.author);
+            setBountyToast({ amount, name: creatorName });
+            setTimeout(() => setBountyToast(null), 4000);
+          }
+        } catch (err) { console.error("[ChatUI] bounty toast error:", err); }
+      }
     } finally { setBusy(false); }
+  };
+
+  const sendTokenCommand = async (amount: string, tokenSym: string, litName: string) => {
+    const key = tokenSym.toUpperCase();
+    const token = TOKENS[key];
+    if (!token) throw new Error(`Unknown token: ${tokenSym}`);
+    const r = await fetch(`${API}/hub/resolve/${encodeURIComponent(litName)}`);
+    const j = await r.json();
+    const to = j?.address || j?.wallet || j?.walletAddress || j?.data?.address;
+    if (!to) throw new Error(`Could not resolve ${litName}`);
+    if (token.address === null) {
+      await writeContract(to, "0x", parseUnitsStr(amount, 18));
+    } else {
+      const data = ERC20_TRANSFER_SELECTOR + addressHex(to) + uintHex(parseUnitsStr(amount, token.decimals));
+      await writeContract(token.address, data, 0n);
+    }
+    const content = `send ${amount} ${token.symbol} to ${litName}`;
+    await writeContract(
+      HUB_POSTS_ADDRESS,
+      encodeCall(SELECTOR.createPost, [
+        { type: "string", value: content },
+        { type: "uint", value: 0n },
+        { type: "uint", value: 0n },
+      ]),
+      0n,
+    );
+    await loadPosts();
   };
 
   const commentPost = async (postId: string, rawText: string) => {
@@ -539,6 +608,19 @@ export default function ChatUIPage() {
   const sendGlobal = async () => {
     const body = draft.trim();
     if (!body) return;
+    const sendMatch = body.match(SEND_CMD_RE);
+    if (sendMatch) {
+      setBusy(true);
+      try {
+        await sendTokenCommand(sendMatch[1], sendMatch[2], sendMatch[3]);
+        setDraft("");
+        setReplyTo(null);
+      } catch (err: any) {
+        console.error("[ChatUI] send command error:", err);
+        alert(err?.message || "Send failed");
+      } finally { setBusy(false); }
+      return;
+    }
     const content = replyTo
       ? (body.startsWith("@") ? body : `@${short(replyTo.authorAddr)} ${body}`)
       : body;
@@ -780,6 +862,35 @@ export default function ChatUIPage() {
                       (myLitName && contentLc.includes(`@${myLitName}`))
                     );
                     const isHighlighted = highlightedId === post.id;
+                    const sendMatch = (post.content || "").match(SEND_CMD_RE);
+                    if (sendMatch) {
+                      const senderName = post.name || short(post.author);
+                      return (
+                        <div key={item.id} className="flex justify-start">
+                          <div
+                            ref={(el) => { postRefs.current[post.id] = el; }}
+                            className={cn(
+                              "relative max-w-[760px] w-fit rounded-xl border border-green-500/50 bg-gradient-to-r from-green-900/40 to-emerald-900/40 px-4 py-3 text-sm text-brand-text-primary transition-all",
+                              isHighlighted && "ring-2 ring-yellow-400"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+                              <span>➤</span>
+                              <span>Token Sent</span>
+                              <span className="ml-2 text-[10px] font-normal text-brand-text-muted normal-case tracking-normal">{displayTime(post.timestamp)}</span>
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              <Avatar name={senderName} size={30} />
+                              <div className="text-sm leading-snug">
+                                <span className="font-semibold">{senderName}</span>{" "}
+                                sent <span className="font-semibold text-emerald-300">{sendMatch[1]} {sendMatch[2]}</span>{" "}
+                                to <span className="font-semibold">{sendMatch[3]}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
                       <div key={item.id} className="flex justify-start">
                         <div
@@ -1042,6 +1153,12 @@ export default function ChatUIPage() {
           <div className="mt-3"><div className="mb-1 text-xs text-brand-text-muted">Note</div><input value={tipNote} onChange={(e) => setTipNote(e.target.value)} className="w-full h-10 rounded-md bg-brand-bg border border-brand-border px-3 text-sm text-brand-text-primary outline-none" /></div>
           <button disabled={busy} onClick={sendTip} className="mt-4 w-full h-10 rounded-md bg-brand-teal text-brand-bg text-sm font-semibold disabled:opacity-50">Send</button>
         </Modal>
+      )}
+
+      {bountyToast && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-yellow-500/90 text-black rounded-xl px-6 py-3 shadow-xl font-bold text-sm pointer-events-none">
+          🎉 You received {bountyToast.amount} zkLTC like bounty from @{bountyToast.name}!
+        </div>
       )}
     </div>
   );

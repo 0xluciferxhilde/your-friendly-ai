@@ -9,7 +9,6 @@ import {
   Menu,
   MessageCircle,
   MoreHorizontal,
-  Paperclip,
   Reply,
   Search,
   Send,
@@ -242,11 +241,18 @@ export default function ChatUIPage() {
   const [fetchedReplyPosts, setFetchedReplyPosts] = useState<Record<string, { id: string; author: string; name?: string; content: string }>>({});
   const [inlineBountyActive, setInlineBountyActive] = useState(false);
   const [inlineLikeReward, setInlineLikeReward] = useState("");
-  const [inlineCommentReward, setInlineCommentReward] = useState("");
+  const [inlineTotalBounty, setInlineTotalBounty] = useState("");
   const inlineBountyTotal = useMemo(() => {
-    const t = Number(inlineLikeReward || 0) + Number(inlineCommentReward || 0);
+    const t = Number(inlineTotalBounty || 0);
     return Number.isFinite(t) ? t.toFixed(4) : "0";
-  }, [inlineLikeReward, inlineCommentReward]);
+  }, [inlineTotalBounty]);
+  const inlineBountyLikes = useMemo(() => {
+    const per = Number(inlineLikeReward || 0);
+    const total = Number(inlineTotalBounty || 0);
+    if (!per || !total || per <= 0) return 0;
+    return Math.floor(total / per);
+  }, [inlineLikeReward, inlineTotalBounty]);
+  const [emojiOpen, setEmojiOpen] = useState(false);
 
   const [visitedMentions, setVisitedMentions] = useState<Set<string>>(new Set());
 
@@ -551,23 +557,21 @@ export default function ChatUIPage() {
       await writeContract(HUB_POSTS_ADDRESS, encodeCall(SELECTOR.likePost, [{ type: "uint", value: post.postId }]));
       setPosts((list) => list.map((p) => p.id === post.id ? { ...p, liked: true } : p));
       await refreshPost(post.postId);
-      if (post.bountyActive) {
-        try {
-          const r = await fetch(`${API}/hub/posts/${post.postId}`);
-          const j = await r.json();
-          const p = j.post || j.data || j;
-          const rewardRaw = p?.likeReward ?? p?.likeBounty ?? p?.likeRewardWei;
-          if (rewardRaw && BigInt(rewardRaw) > 0n) {
-            const wei = BigInt(rewardRaw);
-            const whole = wei / 10n ** 18n;
-            const frac = (wei % 10n ** 18n).toString().padStart(18, "0").replace(/0+$/, "");
-            const amount = frac ? `${whole}.${frac}` : `${whole}`;
-            const creatorName = post.name || short(post.author);
-            setBountyToast({ amount, name: creatorName });
-            setTimeout(() => setBountyToast(null), 4000);
-          }
-        } catch (err) { console.error("[ChatUI] bounty toast error:", err); }
-      }
+      try {
+        const r = await fetch(`${API}/hub/posts/${post.postId}`);
+        const j = await r.json();
+        const p = j.post || j.data || j;
+        const rewardRaw = p?.likeReward ?? p?.likeBounty ?? p?.likeRewardWei;
+        if (rewardRaw && BigInt(rewardRaw) > 0n) {
+          const wei = BigInt(rewardRaw);
+          const whole = wei / 10n ** 18n;
+          const frac = (wei % 10n ** 18n).toString().padStart(18, "0").replace(/0+$/, "");
+          const amount = frac ? `${whole}.${frac}` : `${whole}`;
+          const creatorName = post.name || short(post.author);
+          setBountyToast({ amount, name: creatorName });
+          setTimeout(() => setBountyToast(null), 4000);
+        }
+      } catch (err) { console.error("[ChatUI] bounty toast error:", err); }
     } finally { setBusy(false); }
   };
 
@@ -634,10 +638,10 @@ export default function ChatUIPage() {
     const content = replyTo
       ? `[replyTo:${replyTo.postId}] @${replyTo.name || short(replyTo.authorAddr)} ${body}`
       : body;
-    const useBounty = inlineBountyActive && (Number(inlineLikeReward || 0) > 0 || Number(inlineCommentReward || 0) > 0);
+    const useBounty = inlineBountyActive && Number(inlineLikeReward || 0) > 0 && Number(inlineTotalBounty || 0) > 0;
     const likeWei = useBounty ? parseAmount(inlineLikeReward || "0") : 0n;
-    const commentWei = useBounty ? parseAmount(inlineCommentReward || "0") : 0n;
-    const budgetWei = useBounty ? (likeWei + commentWei) : 0n;
+    const commentWei = 0n;
+    const budgetWei = useBounty ? parseAmount(inlineTotalBounty || "0") : 0n;
     setBusy(true);
     try {
       await writeContract(
@@ -653,7 +657,7 @@ export default function ChatUIPage() {
       setReplyTo(null);
       setInlineBountyActive(false);
       setInlineLikeReward("");
-      setInlineCommentReward("");
+      setInlineTotalBounty("");
       setBountyPopupOpen(false);
       await loadPosts();
     } finally { setBusy(false); }
@@ -1266,8 +1270,7 @@ export default function ChatUIPage() {
                 </>
               )}
               <div className="relative flex items-center gap-1 px-2 py-2">
-                <IconBtn aria-label="Emoji"><Smile size={18} /></IconBtn>
-                <IconBtn aria-label="Attach"><Paperclip size={18} /></IconBtn>
+                <IconBtn aria-label="Emoji" onClick={() => setEmojiOpen((v) => !v)}><Smile size={18} /></IconBtn>
                 {tab === "global" && (
                   <button
                     type="button"
@@ -1311,17 +1314,17 @@ export default function ChatUIPage() {
                       placeholder="0.01"
                       className="w-full h-8 px-2 mb-2 rounded-md bg-brand-bg border border-brand-border text-xs text-brand-text-primary outline-none"
                     />
-                    <label className="block text-[11px] text-brand-text-muted mb-1">💬 Reply reward (zkLTC)</label>
+                    <label className="block text-[11px] text-brand-text-muted mb-1">Total bounty to place (zkLTC)</label>
                     <input
-                      value={inlineCommentReward}
-                      onChange={(e) => setInlineCommentReward(e.target.value)}
-                      placeholder="0.01"
+                      value={inlineTotalBounty}
+                      onChange={(e) => setInlineTotalBounty(e.target.value)}
+                      placeholder="1.00"
                       className="w-full h-8 px-2 mb-2 rounded-md bg-brand-bg border border-brand-border text-xs text-brand-text-primary outline-none"
                     />
-                    <div className="text-[11px] text-brand-text-muted mb-2">Total bounty: <span className="text-brand-text-primary font-medium">{inlineBountyTotal} zkLTC</span></div>
+                    <div className="text-[11px] text-brand-text-muted mb-2">ℹ️ Bounty lasts for <span className="text-brand-text-primary font-medium">{inlineBountyLikes}</span> likes</div>
                     <button
                       onClick={() => {
-                        const hasVal = Number(inlineLikeReward || 0) > 0 || Number(inlineCommentReward || 0) > 0;
+                        const hasVal = Number(inlineLikeReward || 0) > 0 && Number(inlineTotalBounty || 0) > 0;
                         setInlineBountyActive(hasVal);
                         setBountyPopupOpen(false);
                       }}
@@ -1334,7 +1337,7 @@ export default function ChatUIPage() {
                         onClick={() => {
                           setInlineBountyActive(false);
                           setInlineLikeReward("");
-                          setInlineCommentReward("");
+                          setInlineTotalBounty("");
                           setBountyPopupOpen(false);
                         }}
                         className="mt-2 w-full h-7 rounded-md border border-brand-border text-[11px] text-brand-text-muted hover:text-brand-text-primary"
@@ -1346,6 +1349,27 @@ export default function ChatUIPage() {
                 )}
                 {tab === "global" && inlineBountyActive && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">💰 {inlineBountyTotal}</span>
+                )}
+                {emojiOpen && (
+                  <EmojiPicker
+                    onClose={() => setEmojiOpen(false)}
+                    onPick={(emoji) => {
+                      const el = inputRef.current;
+                      if (el) {
+                        const start = el.selectionStart ?? draft.length;
+                        const end = el.selectionEnd ?? draft.length;
+                        const next = draft.slice(0, start) + emoji + draft.slice(end);
+                        setDraft(next);
+                        requestAnimationFrame(() => {
+                          el.focus();
+                          const pos = start + emoji.length;
+                          el.setSelectionRange(pos, pos);
+                        });
+                      } else {
+                        setDraft(draft + emoji);
+                      }
+                    }}
+                  />
                 )}
                 <input
                   ref={inputRef}
@@ -1437,6 +1461,67 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
       <div className="w-full max-w-md rounded-lg border border-brand-border bg-brand-surface p-4 shadow-2xl">
         <div className="mb-3 flex items-center justify-between"><h2 className="text-base font-semibold text-brand-text-primary">{title}</h2><IconBtn aria-label="Close" onClick={onClose}><X size={18} /></IconBtn></div>
         {children}
+      </div>
+    </div>
+  );
+}
+
+const EMOJI_CATEGORIES: { label: string; emojis: string[] }[] = [
+  { label: "Smileys", emojis: ["😀","😃","😄","😁","😆","😅","😂","🤣","😊","🙂","😉","😍","😘","😜","🤪","😎","🤩","🥳","😏","😭","😡","🤔","😴","🤤","🤯","🥺","😬","😱","🤗","🤐"] },
+  { label: "Gestures", emojis: ["👍","👎","👌","✌️","🤞","🤟","🤘","🤙","👈","👉","👆","👇","☝️","👋","🤚","🖐️","✋","🖖","👏","🙌","🙏","💪","🫶","🤝","✊","👊"] },
+  { label: "Animals", emojis: ["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🐔","🐧","🐦","🐤","🦄","🐝","🦋","🐢","🐍","🐙","🦀","🐬","🐳","🦈","🐊"] },
+  { label: "Food", emojis: ["🍎","🍊","🍋","🍌","🍉","🍇","🍓","🍒","🍑","🥭","🍍","🥥","🥝","🍅","🥑","🌽","🌶️","🥕","🍔","🍟","🍕","🌭","🥪","🌮","🍣","🍩","🍪","🎂","🍰","🍫","🍿","🍺","🍷","☕","🍵"] },
+  { label: "Travel", emojis: ["🚗","🚕","🚙","🚌","🚎","🏎️","🚓","🚑","🚒","🚜","🛵","🏍️","🚲","✈️","🚀","🛸","🚁","⛵","🚤","🛳️","🚂","🗽","🗼","🏰","🏖️","🏝️","🏔️","🌋","🗺️","🧭"] },
+  { label: "Objects", emojis: ["💎","💰","💸","💵","🎁","🎉","🎊","🎈","🔔","💡","🔦","📱","💻","⌨️","🖥️","🖱️","💾","📷","🎥","📺","🎮","🕹️","🎲","🎯","🏆","🥇","🔑","🔒","📦","📚"] },
+  { label: "Symbols", emojis: ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","💔","❣️","💕","💞","💓","💗","💖","💘","💝","🔥","⭐","🌟","✨","⚡","☀️","🌈","☁️","❄️","✅","❌","⚠️","♻️","🔱","💯","✔️","➡️","⬅️"] },
+];
+
+function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
+  const [cat, setCat] = React.useState(0);
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+  return (
+    <div
+      ref={ref}
+      className="absolute bottom-full left-2 mb-2 z-30 w-72 rounded-lg border border-brand-border bg-brand-surface-2 p-2 shadow-2xl"
+    >
+      <div className="flex gap-1 overflow-x-auto mb-2 pb-1 border-b border-brand-border">
+        {EMOJI_CATEGORIES.map((c, i) => (
+          <button
+            key={c.label}
+            type="button"
+            onClick={() => setCat(i)}
+            className={cn(
+              "px-2 py-1 rounded text-[10px] whitespace-nowrap",
+              i === cat ? "bg-white/10 text-brand-text-primary" : "text-brand-text-muted hover:text-brand-text-primary",
+            )}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
+        {EMOJI_CATEGORIES[cat].emojis.map((e, i) => (
+          <button
+            key={`${e}-${i}`}
+            type="button"
+            onClick={() => onPick(e)}
+            className="h-7 w-7 inline-flex items-center justify-center rounded hover:bg-white/10 text-lg"
+          >
+            {e}
+          </button>
+        ))}
       </div>
     </div>
   );

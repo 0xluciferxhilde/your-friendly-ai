@@ -1154,6 +1154,12 @@ export default function ChatUIPage() {
           <button disabled={busy} onClick={sendTip} className="mt-4 w-full h-10 rounded-md bg-brand-teal text-brand-bg text-sm font-semibold disabled:opacity-50">Send</button>
         </Modal>
       )}
+
+      {bountyToast && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-yellow-500/90 text-black rounded-xl px-6 py-3 shadow-xl font-bold text-sm pointer-events-none">
+          🎉 You received {bountyToast.amount} zkLTC like bounty from @{bountyToast.name}!
+        </div>
+      )}
     </div>
   );
 }

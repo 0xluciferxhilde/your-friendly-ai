@@ -4,6 +4,9 @@ import {
   ArrowUp,
   Check,
   ChevronUp,
+  ChevronRight,
+  Copy,
+  Filter,
   Globe,
   Heart,
   Menu,
@@ -13,8 +16,11 @@ import {
   Search,
   Send,
   Share2,
+  ShoppingBag,
   Smile,
   SquarePen,
+  Tag,
+  TrendingUp,
   User2,
   X,
 } from "lucide-react";
@@ -288,6 +294,13 @@ export default function ChatUIPage() {
   const [listPriceFor, setListPriceFor] = useState<Record<string, string>>({});
   const [transferTo, setTransferTo] = useState<Record<string, string>>({});
 
+  // Market UX — OpenSea-style state
+  const [marketSearch, setMarketSearch] = useState("");
+  const [profileTab, setProfileTab] = useState<"domains" | "listings" | "bids" | "activity">("domains");
+  const [bidsForOwner, setBidsForOwner] = useState<Array<{ domain: string; bidder: string; bidderName?: string; amount: string; bidAt: number }>>([]);
+  const [bidsByDomain, setBidsByDomain] = useState<Record<string, Array<{ bidder: string; amount: string; bidAt: number }>>>({});
+  const [profileCopied, setProfileCopied] = useState(false);
+
   // Resolve my own .lit name for sidebar bottom
   useEffect(() => {
     if (!wallet) { setMyDisplayName(""); return; }
@@ -320,9 +333,11 @@ export default function ChatUIPage() {
         if (!cancelled) setProfileName(n && typeof n === "string" ? n : "");
       } catch { if (!cancelled) setProfileName(""); }
       try {
-        const r = await fetch(`${API}/hub/points/${profileAddr}`);
+        // Same endpoint the top navbar/messenger uses — keeps profile points
+        // consistent with whatever the user sees on the Points page.
+        const r = await fetch(`https://api.test-hub.xyz/points/${profileAddr}`);
         const j = await r.json();
-        if (!cancelled) setProfilePoints(String(j?.points ?? j?.balance ?? j?.total ?? 0));
+        if (!cancelled) setProfilePoints(String(j?.total ?? j?.points ?? j?.balance ?? 0));
       } catch { if (!cancelled) setProfilePoints("0"); }
       try {
         const r = await fetch(RPC_URL, {
@@ -385,12 +400,119 @@ export default function ChatUIPage() {
     } catch { setMyDomains([]); }
   }, [wallet]);
 
+  // Bids on listings the connected wallet is selling. Backend may not yet
+  // expose this, in which case we render an empty state instead of breaking.
+  const loadBidsForOwner = useCallback(async () => {
+    if (!wallet) { setBidsForOwner([]); return; }
+    try {
+      const r = await fetch(`${API}/hub/market/bids/seller/${wallet}`);
+      if (!r.ok) { setBidsForOwner([]); return; }
+      const j = await r.json();
+      const arr = readArray(j, ["bids", "data", "items"]);
+      const mapped = arr.map((b: any) => ({
+        domain: b.domain || b.name || "",
+        bidder: b.bidder || b.from || "",
+        bidderName: b.bidderName || b.litName || undefined,
+        amount: String(b.amount ?? b.price ?? 0),
+        bidAt: Number(b.bidAt ?? b.timestamp ?? b.createdAt ?? 0),
+      })).filter((b: any) => b.domain && b.bidder);
+      setBidsForOwner(mapped);
+    } catch { setBidsForOwner([]); }
+  }, [wallet]);
+
+  // All bids grouped by domain — used to show bid count on each market card
+  // and to populate the bid history inside the listing detail view.
+  const loadBidsByDomain = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/hub/market/bids`);
+      if (!r.ok) { setBidsByDomain({}); return; }
+      const j = await r.json();
+      const arr = readArray(j, ["bids", "data", "items"]);
+      const grouped: Record<string, Array<{ bidder: string; amount: string; bidAt: number }>> = {};
+      for (const b of arr) {
+        const d = b.domain || b.name;
+        if (!d) continue;
+        if (!grouped[d]) grouped[d] = [];
+        grouped[d].push({
+          bidder: b.bidder || b.from || "",
+          amount: String(b.amount ?? b.price ?? 0),
+          bidAt: Number(b.bidAt ?? b.timestamp ?? b.createdAt ?? 0),
+        });
+      }
+      // newest first
+      Object.values(grouped).forEach((list) => list.sort((a, b) => b.bidAt - a.bidAt));
+      setBidsByDomain(grouped);
+    } catch { /* ignore */ }
+  }, []);
+
+  const acceptBid = useCallback(async (domain: string, bidder: string, amount: string) => {
+    if (!wallet) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`${API}/hub/market/accept-bid`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: domain, seller: wallet, bidder, amount }),
+      });
+      if (!r.ok) throw new Error("Accept failed");
+      // Local notifications for both parties (best-effort).
+      addNotif(wallet, {
+        type: "gf",
+        title: `Bid accepted`,
+        message: `Sold ${domain} to ${short(bidder)} for ${amount} zkLTC`,
+        link: `/chat`,
+      });
+      addNotif(bidder, {
+        type: "gf",
+        title: `Your bid was accepted`,
+        message: `${short(wallet)} accepted your ${amount} zkLTC bid on ${domain}`,
+        link: `/chat`,
+      });
+      await Promise.all([loadListings(), loadSold(), loadMyDomains(), loadBidsForOwner(), loadBidsByDomain()]);
+    } catch (err: any) {
+      try { (await import("sonner")).toast.error(err?.message || "Accept failed"); } catch { /* ignore */ }
+    } finally { setBusy(false); }
+  }, [wallet, loadListings, loadSold, loadMyDomains, loadBidsForOwner, loadBidsByDomain]);
+
+  const rejectBid = useCallback(async (domain: string, bidder: string) => {
+    if (!wallet) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`${API}/hub/market/reject-bid`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: domain, seller: wallet, bidder }),
+      });
+      if (!r.ok) throw new Error("Reject failed");
+      addNotif(bidder, {
+        type: "gf",
+        title: `Bid rejected`,
+        message: `${short(wallet)} declined your bid on ${domain}`,
+        link: `/chat`,
+      });
+      await Promise.all([loadBidsForOwner(), loadBidsByDomain()]);
+    } catch (err: any) {
+      try { (await import("sonner")).toast.error(err?.message || "Reject failed"); } catch { /* ignore */ }
+    } finally { setBusy(false); }
+  }, [wallet, loadBidsForOwner, loadBidsByDomain]);
+
   useEffect(() => {
     if (view !== "market") return;
     loadListings();
     loadSold();
     loadMyDomains();
-  }, [view, loadListings, loadSold, loadMyDomains]);
+    loadBidsForOwner();
+    loadBidsByDomain();
+  }, [view, loadListings, loadSold, loadMyDomains, loadBidsForOwner, loadBidsByDomain]);
+
+  // Keep "incoming bids" badge fresh in profile, even when the user hasn't
+  // opened the market yet.
+  useEffect(() => {
+    if (!wallet) return;
+    loadBidsForOwner();
+    const id = setInterval(loadBidsForOwner, 30_000);
+    return () => clearInterval(id);
+  }, [wallet, loadBidsForOwner]);
 
   const openProfile = (addr: string) => {
     setProfileAddr(addr);
@@ -1868,86 +1990,421 @@ export default function ChatUIPage() {
       )}
 
       {view === "profile" && (
-        <div className="fixed inset-0 z-[90] bg-brand-bg overflow-y-auto">
-          <div className="max-w-3xl mx-auto p-6">
+        <div className="fixed top-16 sm:top-20 left-0 right-0 bottom-0 z-[40] bg-brand-bg overflow-y-auto">
+          <div className="max-w-5xl mx-auto p-4 sm:p-6 pb-16">
+            {/* Top bar */}
             <div className="flex items-center mb-6">
-              <button onClick={() => setView("chat")} className="text-sm text-brand-text-muted hover:text-brand-text-primary">← Back</button>
+              <button
+                onClick={() => setView("chat")}
+                className="inline-flex items-center gap-1.5 text-sm text-brand-text-muted hover:text-brand-text-primary transition-colors"
+              >
+                <ChevronRight className="rotate-180" size={16} /> Back
+              </button>
+              <h1 className="ml-4 text-base sm:text-lg font-semibold text-brand-text-primary">Profile</h1>
             </div>
-            <div className="flex items-center gap-4 mb-6">
-              <Avatar name={profileName || namesRef.current[profileAddr.toLowerCase()] || profileAddr} size={72} />
-              <div className="min-w-0">
-                {(() => {
-                  const litName = profileName || (profileAddr.toLowerCase() === wallet.toLowerCase() ? myDisplayName : "") || namesRef.current[profileAddr.toLowerCase()];
-                  const hasLit = litName && !litName.startsWith("0x");
-                  return (
-                    <>
-                      <div className="text-xl font-semibold text-brand-text-primary truncate">
-                        {hasLit ? litName : short(profileAddr)}
-                      </div>
-                      {hasLit && <div className="text-xs text-brand-text-muted truncate">{short(profileAddr)}</div>}
-                    </>
-                  );
-                })()}
+
+            {/* Identity card */}
+            <div className="rounded-2xl border border-brand-border bg-gradient-to-br from-brand-surface to-brand-bg p-5 sm:p-6 mb-5">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <Avatar name={profileName || namesRef.current[profileAddr.toLowerCase()] || profileAddr} size={84} />
+                <div className="min-w-0 flex-1">
+                  {(() => {
+                    const litName = profileName || (profileAddr.toLowerCase() === wallet.toLowerCase() ? myDisplayName : "") || namesRef.current[profileAddr.toLowerCase()];
+                    const hasLit = litName && !litName.startsWith("0x");
+                    return (
+                      <>
+                        <div className="text-2xl font-semibold text-brand-text-primary truncate">
+                          {hasLit ? litName : short(profileAddr)}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-xs text-brand-text-muted font-mono truncate">{short(profileAddr)}</span>
+                          <button
+                            type="button"
+                            aria-label="Copy address"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(profileAddr);
+                                setProfileCopied(true);
+                                setTimeout(() => setProfileCopied(false), 1500);
+                              } catch { /* ignore */ }
+                            }}
+                            className="inline-flex items-center gap-1 px-2 h-6 rounded-md bg-white/5 hover:bg-white/10 border border-brand-border text-[10px] text-brand-text-muted hover:text-brand-text-primary transition-colors"
+                          >
+                            <Copy size={11} />
+                            {profileCopied ? "Copied" : "Copy"}
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Stat tiles */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+                <div className="rounded-xl border border-brand-border bg-brand-surface px-4 py-3">
+                  <div className="text-[10px] uppercase tracking-wider text-brand-text-muted font-semibold">Points</div>
+                  <div className="text-xl font-bold text-brand-text-primary mt-1 tabular-nums">{Number(profilePoints || 0).toLocaleString()}</div>
+                </div>
+                <div className="rounded-xl border border-brand-border bg-brand-surface px-4 py-3">
+                  <div className="text-[10px] uppercase tracking-wider text-brand-text-muted font-semibold">zkLTC</div>
+                  <div className="text-xl font-bold text-brand-text-primary mt-1 tabular-nums">{(parseFloat(profileBalance) || 0).toFixed(4)}</div>
+                </div>
+                <div className="rounded-xl border border-brand-border bg-brand-surface px-4 py-3">
+                  <div className="text-[10px] uppercase tracking-wider text-brand-text-muted font-semibold">Domains</div>
+                  <div className="text-xl font-bold text-brand-text-primary mt-1 tabular-nums">{profileDomains.length}</div>
+                </div>
+                <div className="rounded-xl border border-brand-border bg-brand-surface px-4 py-3">
+                  <div className="text-[10px] uppercase tracking-wider text-brand-text-muted font-semibold">Listings</div>
+                  <div className="text-xl font-bold text-brand-text-primary mt-1 tabular-nums">
+                    {listingsFull.filter((l) => l.seller?.toLowerCase() === profileAddr.toLowerCase()).length}
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-              <div className="rounded-lg border border-brand-border bg-brand-surface p-4">
-                <div className="text-[11px] text-brand-text-muted">Points</div>
-                <div className="text-lg font-semibold text-brand-text-primary mt-1">{profilePoints}</div>
-              </div>
-              <div className="rounded-lg border border-brand-border bg-brand-surface p-4">
-                <div className="text-[11px] text-brand-text-muted">zkLTC balance</div>
-                <div className="text-lg font-semibold text-brand-text-primary mt-1">{(parseFloat(profileBalance) || 0).toFixed(4)} zkLTC</div>
-              </div>
-            </div>
-            <div className="mb-6">
-              <div className="text-xs font-semibold text-brand-text-muted mb-2">.lit Domains</div>
-              <div className="flex flex-wrap gap-2">
-                {profileDomains.length === 0 && <div className="text-xs text-brand-text-muted">No domains owned</div>}
-                {profileDomains.map((d) => (
-                  <span key={d} className="px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-xs font-semibold text-emerald-300">{d}</span>
-                ))}
-              </div>
-            </div>
+
+            {/* Tabs (only show full tab set for own profile) */}
+            {(() => {
+              const isMe = profileAddr.toLowerCase() === wallet.toLowerCase();
+              const myListings = listingsFull.filter((l) => l.seller?.toLowerCase() === profileAddr.toLowerCase());
+              const incomingBids = isMe ? bidsForOwner : [];
+              const tabs: Array<{ key: typeof profileTab; label: string; badge?: number; show: boolean }> = [
+                { key: "domains", label: "Domains", badge: profileDomains.length, show: true },
+                { key: "listings", label: "My Listings", badge: myListings.length, show: true },
+                { key: "bids", label: "Incoming Bids", badge: incomingBids.length, show: isMe },
+              ];
+
+              return (
+                <>
+                  <div className="flex items-center gap-1 mb-4 border-b border-brand-border">
+                    {tabs.filter((t) => t.show).map((t) => (
+                      <button
+                        key={t.key}
+                        onClick={() => setProfileTab(t.key)}
+                        className={cn(
+                          "px-4 py-2.5 text-sm font-semibold transition-colors -mb-px border-b-2",
+                          profileTab === t.key
+                            ? "border-emerald-400 text-brand-text-primary"
+                            : "border-transparent text-brand-text-muted hover:text-brand-text-primary"
+                        )}
+                      >
+                        {t.label}
+                        {typeof t.badge === "number" && t.badge > 0 && (
+                          <span className={cn(
+                            "ml-2 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[10px] font-bold",
+                            profileTab === t.key ? "bg-emerald-500/20 text-emerald-300" : "bg-white/5 text-brand-text-muted"
+                          )}>
+                            {t.badge}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* DOMAINS TAB */}
+                  {profileTab === "domains" && (
+                    <div>
+                      {profileDomains.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-brand-border bg-brand-surface/50 px-6 py-10 text-center">
+                          <Tag size={28} className="mx-auto mb-3 text-brand-text-muted" />
+                          <div className="text-sm text-brand-text-muted">No .lit domains owned yet</div>
+                          {isMe && (
+                            <button
+                              onClick={() => setView("market")}
+                              className="mt-4 inline-flex items-center gap-1.5 px-4 h-9 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition-colors"
+                            >
+                              Browse Marketplace <ChevronRight size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {profileDomains.map((d) => {
+                            const listed = listingsFull.find((l) => l.name === d && l.seller?.toLowerCase() === profileAddr.toLowerCase());
+                            return (
+                              <div
+                                key={d}
+                                className="group relative rounded-xl border border-brand-border bg-brand-surface p-4 hover:border-emerald-500/40 transition-colors"
+                              >
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="text-[10px] font-bold tracking-wider text-emerald-400">.LIT</div>
+                                  {listed && (
+                                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-semibold text-emerald-300">
+                                      Listed
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-lg font-semibold text-brand-text-primary truncate" title={d}>{d}</div>
+                                {listed && (
+                                  <div className="mt-1 text-xs text-brand-text-muted">
+                                    Asking <span className="text-emerald-400 font-semibold">{listed.price} zkLTC</span>
+                                  </div>
+                                )}
+                                {isMe && (
+                                  <button
+                                    onClick={() => setView("market")}
+                                    className="mt-3 w-full h-8 rounded-md bg-white/5 hover:bg-white/10 border border-brand-border text-[11px] font-semibold text-brand-text-primary transition-colors"
+                                  >
+                                    Manage in Market
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* MY LISTINGS TAB */}
+                  {profileTab === "listings" && (
+                    <div>
+                      {myListings.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-brand-border bg-brand-surface/50 px-6 py-10 text-center">
+                          <ShoppingBag size={28} className="mx-auto mb-3 text-brand-text-muted" />
+                          <div className="text-sm text-brand-text-muted">No active listings</div>
+                          {isMe && (
+                            <button
+                              onClick={() => setView("market")}
+                              className="mt-4 inline-flex items-center gap-1.5 px-4 h-9 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition-colors"
+                            >
+                              List a Domain <ChevronRight size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {myListings.map((l) => {
+                            const cardBids = bidsByDomain[l.name] || [];
+                            return (
+                              <div key={`${l.name}-${l.listedAt}`} className="rounded-xl border border-brand-border bg-brand-surface p-4">
+                                <div className="flex items-start justify-between mb-2">
+                                  <div>
+                                    <div className="text-[10px] font-bold tracking-wider text-emerald-400">.LIT</div>
+                                    <div className="text-lg font-semibold text-brand-text-primary truncate">{l.name}</div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-xl font-bold text-emerald-400 tabular-nums">{l.price}</div>
+                                    <div className="text-[10px] text-brand-text-muted">zkLTC</div>
+                                  </div>
+                                </div>
+                                <div className="text-[11px] text-brand-text-muted">
+                                  Listed {l.listedAt ? displayTime(l.listedAt) : "recently"} ·{" "}
+                                  <span className="text-brand-text-primary font-semibold">{cardBids.length}</span> bid{cardBids.length === 1 ? "" : "s"}
+                                </div>
+                                {isMe && (
+                                  <div className="flex gap-2 mt-3">
+                                    <button
+                                      disabled={busy}
+                                      onClick={async () => {
+                                        setBusy(true);
+                                        try {
+                                          const r = await fetch(`${API}/hub/market/unlist`, {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ name: l.name, seller: wallet }),
+                                          });
+                                          if (!r.ok) throw new Error("Unlist failed");
+                                          addNotif(wallet, { type: "gf", title: "Listing removed", message: `${l.name} unlisted from market`, link: "/chat" });
+                                          await loadListings();
+                                        } catch (err: any) {
+                                          try { (await import("sonner")).toast.error(err?.message || "Unlist failed"); } catch { /* ignore */ }
+                                        } finally { setBusy(false); }
+                                      }}
+                                      className="flex-1 h-9 rounded-md border border-brand-border text-xs font-semibold text-brand-text-primary hover:bg-white/5 disabled:opacity-50 transition-colors"
+                                    >
+                                      Unlist
+                                    </button>
+                                    {cardBids.length > 0 && (
+                                      <button
+                                        onClick={() => setProfileTab("bids")}
+                                        className="flex-1 h-9 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition-colors"
+                                      >
+                                        View {cardBids.length} bid{cardBids.length === 1 ? "" : "s"}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* INCOMING BIDS TAB (own profile only) */}
+                  {profileTab === "bids" && isMe && (
+                    <div>
+                      {incomingBids.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-brand-border bg-brand-surface/50 px-6 py-10 text-center">
+                          <TrendingUp size={28} className="mx-auto mb-3 text-brand-text-muted" />
+                          <div className="text-sm text-brand-text-muted">No incoming bids on your listings</div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {incomingBids
+                            .slice()
+                            .sort((a, b) => b.bidAt - a.bidAt)
+                            .map((b, i) => (
+                              <div key={`${b.domain}-${b.bidder}-${i}`} className="rounded-xl border border-brand-border bg-brand-surface p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                                <Avatar name={b.bidderName || b.bidder} size={40} />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-sm text-brand-text-primary">
+                                    <span className="font-semibold">{b.bidderName || short(b.bidder)}</span>
+                                    {" "}bid{" "}
+                                    <span className="font-bold text-emerald-400">{b.amount} zkLTC</span>
+                                    {" "}on{" "}
+                                    <span className="font-semibold">{b.domain}</span>
+                                  </div>
+                                  <div className="text-[11px] text-brand-text-muted mt-0.5">
+                                    {b.bidAt ? displayTime(b.bidAt) : "just now"}
+                                  </div>
+                                </div>
+                                <div className="flex gap-2 self-stretch sm:self-auto">
+                                  <button
+                                    disabled={busy}
+                                    onClick={() => acceptBid(b.domain, b.bidder, b.amount)}
+                                    className="px-4 h-9 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold disabled:opacity-50 transition-colors"
+                                  >
+                                    Accept
+                                  </button>
+                                  <button
+                                    disabled={busy}
+                                    onClick={() => rejectBid(b.domain, b.bidder)}
+                                    className="px-4 h-9 rounded-md border border-brand-border text-xs font-semibold text-brand-text-primary hover:bg-white/5 disabled:opacity-50 transition-colors"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
 
       {view === "market" && (
-        <div className="fixed inset-0 z-[90] bg-brand-bg overflow-y-auto">
-          <div className="max-w-5xl mx-auto p-6 pb-32">
-            <div className="flex items-center mb-6">
-              <button onClick={() => setView("chat")} className="text-sm text-brand-text-muted hover:text-brand-text-primary">← Back</button>
-              <h1 className="ml-4 text-xl font-semibold text-brand-text-primary">.lit Domain Market</h1>
+        <div className="fixed top-16 sm:top-20 left-0 right-0 bottom-0 z-[40] bg-brand-bg overflow-y-auto">
+          <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-32">
+            {/* Top bar */}
+            <div className="flex items-center mb-5">
+              <button
+                onClick={() => setView("chat")}
+                className="inline-flex items-center gap-1.5 text-sm text-brand-text-muted hover:text-brand-text-primary transition-colors"
+              >
+                <ChevronRight className="rotate-180" size={16} /> Back
+              </button>
+              <h1 className="ml-4 text-base sm:text-lg font-semibold text-brand-text-primary">.lit Domain Marketplace</h1>
             </div>
 
-            {/* SECTION 1 — My Domains */}
-            <div className="mb-8">
-              <div className="text-sm font-semibold text-brand-text-primary mb-3">
-                You own <span className="text-emerald-400">{myDomains.length}</span> .lit domain{myDomains.length === 1 ? "" : "s"}
-              </div>
-              {myDomains.length === 0 ? (
-                <div className="text-xs text-brand-text-muted">No domains owned</div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Hero stats */}
+            {(() => {
+              const myListings = listingsFull.filter((l) => l.seller?.toLowerCase() === wallet.toLowerCase());
+              const totalVolume = soldItems.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0);
+              return (
+                <div className="rounded-2xl border border-brand-border bg-gradient-to-br from-emerald-500/10 via-brand-surface to-brand-bg p-5 sm:p-6 mb-5">
+                  <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+                    <div className="flex-1">
+                      <div className="text-[10px] uppercase tracking-[0.25em] text-emerald-300 font-bold mb-1">Verified Marketplace</div>
+                      <h2 className="text-2xl sm:text-3xl font-bold text-brand-text-primary tracking-tight">Trade .lit Domains</h2>
+                      <p className="text-xs text-brand-text-muted mt-2 max-w-md">
+                        Discover, bid on, and sell ownership of .lit names on the LiteForge network.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 lg:gap-3 lg:w-auto w-full">
+                      <div className="rounded-xl bg-black/30 border border-brand-border px-3 py-2.5 backdrop-blur-sm">
+                        <div className="text-[9px] uppercase tracking-wider text-brand-text-muted font-bold">Listings</div>
+                        <div className="text-lg font-bold text-brand-text-primary tabular-nums">{listingsFull.length}</div>
+                      </div>
+                      <div className="rounded-xl bg-black/30 border border-brand-border px-3 py-2.5 backdrop-blur-sm">
+                        <div className="text-[9px] uppercase tracking-wider text-brand-text-muted font-bold">Sold</div>
+                        <div className="text-lg font-bold text-brand-text-primary tabular-nums">{soldItems.length}</div>
+                      </div>
+                      <div className="rounded-xl bg-black/30 border border-brand-border px-3 py-2.5 backdrop-blur-sm">
+                        <div className="text-[9px] uppercase tracking-wider text-brand-text-muted font-bold">Volume</div>
+                        <div className="text-lg font-bold text-emerald-400 tabular-nums">{totalVolume.toFixed(2)}</div>
+                      </div>
+                      <div className="rounded-xl bg-black/30 border border-brand-border px-3 py-2.5 backdrop-blur-sm">
+                        <div className="text-[9px] uppercase tracking-wider text-brand-text-muted font-bold">Yours</div>
+                        <div className="text-lg font-bold text-brand-text-primary tabular-nums">{myListings.length}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Incoming bids alert (only when user has any) */}
+            {bidsForOwner.length > 0 && (
+              <button
+                onClick={() => { setProfileAddr(wallet); setProfileTab("bids"); setView("profile"); }}
+                className="w-full mb-5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/15 px-4 py-3 flex items-center gap-3 text-left transition-colors"
+              >
+                <div className="h-8 w-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                  <TrendingUp size={16} className="text-emerald-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-brand-text-primary">
+                    {bidsForOwner.length} pending bid{bidsForOwner.length === 1 ? "" : "s"} on your listing{bidsForOwner.length === 1 ? "" : "s"}
+                  </div>
+                  <div className="text-[11px] text-brand-text-muted">Tap to review and accept or reject</div>
+                </div>
+                <ChevronRight size={18} className="text-emerald-300" />
+              </button>
+            )}
+
+            {/* My Domains panel — quick list / unlist / send */}
+            {wallet && myDomains.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-brand-text-primary">
+                    Your Domains <span className="ml-1.5 text-brand-text-muted">({myDomains.length})</span>
+                  </h3>
+                  <button
+                    onClick={() => { setProfileAddr(wallet); setProfileTab("domains"); setView("profile"); }}
+                    className="text-[11px] text-brand-text-muted hover:text-brand-text-primary transition-colors inline-flex items-center gap-1"
+                  >
+                    View all <ChevronRight size={12} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {myDomains.map((d) => {
                     const existing = listingsFull.find((l) => l.name === d && l.seller?.toLowerCase() === wallet.toLowerCase());
                     return (
                       <div key={d} className="rounded-xl border border-brand-border bg-brand-surface p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-xs font-semibold text-emerald-300">{d}</span>
-                          <span className="text-[11px] text-brand-text-muted">{existing ? `Listed for ${existing.price} zkLTC` : "Not listed"}</span>
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <div className="text-[10px] font-bold tracking-wider text-emerald-400">.LIT</div>
+                            <div className="text-base font-semibold text-brand-text-primary truncate">{d}</div>
+                          </div>
+                          {existing ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-semibold text-emerald-300">
+                              Listed · {existing.price}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-white/5 border border-brand-border text-[10px] font-medium text-brand-text-muted">
+                              Not listed
+                            </span>
+                          )}
                         </div>
                         {!existing ? (
-                          <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                          <div className="flex gap-2">
                             <input
                               value={listPriceFor[d] || ""}
                               onChange={(e) => setListPriceFor((p) => ({ ...p, [d]: e.target.value }))}
                               placeholder="Price (zkLTC)"
-                              className="flex-1 h-9 px-3 rounded-md bg-brand-bg border border-brand-border text-sm text-brand-text-primary outline-none"
+                              inputMode="decimal"
+                              className="flex-1 h-9 px-3 rounded-md bg-brand-bg border border-brand-border text-sm text-brand-text-primary placeholder:text-brand-text-muted outline-none focus:border-emerald-500/40"
                             />
                             <button
-                              disabled={busy || !(listPriceFor[d] || "").trim()}
+                              disabled={busy || !(listPriceFor[d] || "").trim() || parseFloat(listPriceFor[d] || "0") <= 0}
                               onClick={async () => {
                                 setBusy(true);
                                 try {
@@ -1957,210 +2414,318 @@ export default function ChatUIPage() {
                                     body: JSON.stringify({ name: d, price: listPriceFor[d], seller: wallet }),
                                   });
                                   if (!r.ok) throw new Error("List failed");
+                                  addNotif(wallet, {
+                                    type: "gf",
+                                    title: "Domain listed",
+                                    message: `${d} listed for ${listPriceFor[d]} zkLTC`,
+                                    link: "/chat",
+                                  });
                                   setListPriceFor((p) => ({ ...p, [d]: "" }));
                                   await loadListings();
                                 } catch (err: any) {
                                   try { (await import("sonner")).toast.error(err?.message || "List failed"); } catch { /* ignore */ }
                                 } finally { setBusy(false); }
                               }}
-                              className="h-9 px-4 rounded-md bg-brand-teal text-brand-bg text-xs font-semibold disabled:opacity-50"
+                              className="h-9 px-3 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold disabled:opacity-50 transition-colors"
                             >
-                              List for Sale
+                              List
                             </button>
                           </div>
                         ) : (
-                          <button
-                            disabled={busy}
-                            onClick={async () => {
-                              setBusy(true);
-                              try {
-                                const r = await fetch(`${API}/hub/market/unlist`, {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ name: d, seller: wallet }),
-                                });
-                                if (!r.ok) throw new Error("Unlist failed");
-                                await loadListings();
-                              } catch (err: any) {
-                                try { (await import("sonner")).toast.error(err?.message || "Unlist failed"); } catch { /* ignore */ }
-                              } finally { setBusy(false); }
-                            }}
-                            className="h-9 px-4 rounded-md border border-brand-border text-xs font-semibold text-brand-text-primary hover:bg-white/5 disabled:opacity-50"
-                          >
-                            Unlist
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              disabled={busy}
+                              onClick={async () => {
+                                setBusy(true);
+                                try {
+                                  const r = await fetch(`${API}/hub/market/unlist`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ name: d, seller: wallet }),
+                                  });
+                                  if (!r.ok) throw new Error("Unlist failed");
+                                  addNotif(wallet, { type: "gf", title: "Listing removed", message: `${d} unlisted`, link: "/chat" });
+                                  await loadListings();
+                                } catch (err: any) {
+                                  try { (await import("sonner")).toast.error(err?.message || "Unlist failed"); } catch { /* ignore */ }
+                                } finally { setBusy(false); }
+                              }}
+                              className="flex-1 h-9 rounded-md border border-brand-border text-xs font-semibold text-brand-text-primary hover:bg-white/5 disabled:opacity-50 transition-colors"
+                            >
+                              Unlist
+                            </button>
+                            {(bidsByDomain[d]?.length || 0) > 0 && (
+                              <button
+                                onClick={() => { setProfileAddr(wallet); setProfileTab("bids"); setView("profile"); }}
+                                className="flex-1 h-9 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition-colors"
+                              >
+                                {bidsByDomain[d]?.length} bid{(bidsByDomain[d]?.length || 0) === 1 ? "" : "s"}
+                              </button>
+                            )}
+                          </div>
                         )}
-                        <div className="flex gap-2 mt-2">
-                          <input
-                            value={transferTo[d] || ""}
-                            onChange={(e) => setTransferTo((p) => ({ ...p, [d]: e.target.value }))}
-                            placeholder="0x… or name.lit"
-                            className="flex-1 h-9 px-3 rounded-md bg-brand-bg border border-brand-border text-sm text-brand-text-primary outline-none"
-                          />
-                          <button
-                            disabled={busy || !(transferTo[d] || "").trim()}
-                            onClick={async () => {
-                              const to = (transferTo[d] || "").trim();
-                              setBusy(true);
-                              try {
-                                const r = await fetch(`${API}/hub/market/transfer`, {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ name: d, from: wallet, to }),
-                                });
-                                if (!r.ok) throw new Error("Transfer failed");
-                                setTransferTo((p) => ({ ...p, [d]: "" }));
-                                await loadMyDomains();
-                              } catch (err: any) {
-                                try { (await import("sonner")).toast.error(err?.message || "Transfer failed"); } catch { /* ignore */ }
-                              } finally { setBusy(false); }
-                            }}
-                            className="h-9 px-4 rounded-md bg-sky-500 text-white text-xs font-semibold disabled:opacity-50"
-                          >
-                            Send
-                          </button>
-                        </div>
                       </div>
                     );
                   })}
                 </div>
-              )}
-            </div>
-
-            {/* SECTION 2 — Market Listings */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-3 flex-wrap">
-                <div className="text-sm font-semibold text-brand-text-primary mr-2">Market Listings</div>
-                {([["all","All"],["latest","Latest"],["low","Low to High"],["high","High to Low"],["sold","Recently Sold"]] as const).map(([k, lbl]) => (
-                  <button
-                    key={k}
-                    onClick={() => setMarketFilter(k as any)}
-                    className={cn(
-                      "px-3 h-7 rounded-full text-[11px] font-semibold transition-colors",
-                      marketFilter === k ? "bg-white text-brand-bg" : "border border-brand-border text-brand-text-muted hover:text-brand-text-primary"
-                    )}
-                  >
-                    {lbl}
-                  </button>
-                ))}
               </div>
+            )}
 
-              {marketFilter === "sold" ? (
-                <div className="space-y-2">
-                  {soldItems.length === 0 && <div className="text-sm text-brand-text-muted text-center py-6">No recent sales</div>}
-                  {soldItems.map((s, i) => (
-                    <div key={`${s.domain}-${i}`} className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-brand-text-primary">
-                      <span className="font-semibold">{short(s.buyer)}</span> bought <span className="font-semibold text-emerald-300">{s.domain}</span> from <span className="font-semibold">{short(s.seller)}</span> for <span className="font-semibold text-emerald-300">{s.price} zkLTC</span>
-                      <span className="ml-2 text-[11px] text-brand-text-muted">{displayTime(s.soldAt)}</span>
-                    </div>
+            {/* Search + filter bar */}
+            <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mb-4 bg-brand-bg/95 backdrop-blur-md border-b border-brand-border">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-text-muted" />
+                  <input
+                    value={marketSearch}
+                    onChange={(e) => setMarketSearch(e.target.value)}
+                    placeholder="Search .lit domains"
+                    className="w-full h-10 pl-10 pr-3 rounded-lg bg-brand-surface border border-brand-border text-sm text-brand-text-primary placeholder:text-brand-text-muted outline-none focus:border-emerald-500/40 transition-colors"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 scrollbar-none">
+                  {([
+                    ["all", "All", null],
+                    ["latest", "New", null],
+                    ["low", "Low → High", null],
+                    ["high", "High → Low", null],
+                    ["sold", "Recently Sold", null],
+                  ] as const).map(([k, lbl]) => (
+                    <button
+                      key={k}
+                      onClick={() => setMarketFilter(k as any)}
+                      className={cn(
+                        "shrink-0 px-3.5 h-9 rounded-lg text-xs font-semibold transition-colors",
+                        marketFilter === k
+                          ? "bg-brand-text-primary text-brand-bg"
+                          : "border border-brand-border text-brand-text-muted hover:text-brand-text-primary hover:bg-white/5"
+                      )}
+                    >
+                      {lbl}
+                    </button>
                   ))}
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {(() => {
-                    const sorted = [...listingsFull];
-                    if (marketFilter === "latest") sorted.sort((a, b) => b.listedAt - a.listedAt);
-                    else if (marketFilter === "low") sorted.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
-                    else if (marketFilter === "high") sorted.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
-                    return sorted.length === 0 ? (
-                      <div className="col-span-full text-sm text-brand-text-muted text-center py-6">No listings yet</div>
-                    ) : sorted.map((l) => {
-                      const cardBids = bids[l.name] || [];
+              </div>
+            </div>
+
+            {/* Listings grid OR sold list */}
+            {marketFilter === "sold" ? (
+              <div className="space-y-2">
+                {soldItems.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-brand-border bg-brand-surface/50 px-6 py-12 text-center">
+                    <ShoppingBag size={28} className="mx-auto mb-3 text-brand-text-muted" />
+                    <div className="text-sm text-brand-text-muted">No recent sales yet</div>
+                  </div>
+                ) : (
+                  soldItems.map((s, i) => (
+                    <div key={`${s.domain}-${i}`} className="rounded-xl border border-emerald-500/30 bg-emerald-500/[0.06] px-4 py-3 flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                        <Tag size={14} className="text-emerald-300" />
+                      </div>
+                      <div className="min-w-0 flex-1 text-sm">
+                        <span className="font-semibold text-brand-text-primary">{short(s.buyer)}</span>
+                        <span className="text-brand-text-muted"> bought </span>
+                        <span className="font-semibold text-emerald-300">{s.domain}</span>
+                        <span className="text-brand-text-muted"> from </span>
+                        <span className="font-semibold text-brand-text-primary">{short(s.seller)}</span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-bold text-emerald-400 tabular-nums">{s.price} zkLTC</div>
+                        <div className="text-[10px] text-brand-text-muted">{displayTime(s.soldAt)}</div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : (
+              (() => {
+                let sorted = [...listingsFull];
+                if (marketSearch.trim()) {
+                  const q = marketSearch.trim().toLowerCase();
+                  sorted = sorted.filter((l) => l.name.toLowerCase().includes(q));
+                }
+                if (marketFilter === "latest") sorted.sort((a, b) => b.listedAt - a.listedAt);
+                else if (marketFilter === "low") sorted.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+                else if (marketFilter === "high") sorted.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
+
+                if (sorted.length === 0) {
+                  return (
+                    <div className="rounded-xl border border-dashed border-brand-border bg-brand-surface/50 px-6 py-12 text-center">
+                      <Filter size={28} className="mx-auto mb-3 text-brand-text-muted" />
+                      <div className="text-sm text-brand-text-muted">
+                        {marketSearch.trim() ? `No domains match "${marketSearch.trim()}"` : "No active listings yet"}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {sorted.map((l) => {
+                      const cardBids = bidsByDomain[l.name] || [];
                       const isMine = l.seller?.toLowerCase() === wallet.toLowerCase();
+                      const showBidInput = bidInputs[l.name] !== undefined;
                       return (
-                        <div key={`${l.name}-${l.seller}`} className="rounded-xl border border-brand-border bg-brand-surface p-4 hover:shadow-2xl hover:shadow-emerald-500/10 transition-shadow">
-                          <div className="text-[11px] text-emerald-400 font-bold tracking-wider">.LIT</div>
-                          <div className="text-lg font-semibold text-brand-text-primary mt-1">{l.name}</div>
-                          <div className="text-[11px] text-brand-text-muted mt-1">seller: {short(l.seller)}</div>
-                          <div className="text-2xl font-bold text-emerald-400 mt-3">{l.price} zkLTC</div>
-                          <div className="flex gap-2 mt-3">
-                            <button
-                              disabled={busy || !wallet || isMine}
-                              onClick={async () => {
-                                setBusy(true);
-                                try {
-                                  const r = await fetch(`${API}/hub/market/buy`, {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ name: l.name, buyer: wallet, price: l.price }),
-                                  });
-                                  if (!r.ok) throw new Error("Buy failed");
-                                  setSendToast(`✅ You bought ${l.name}!`);
-                                  setTimeout(() => setSendToast(null), 4000);
-                                  await loadListings();
-                                  await loadSold();
-                                  await loadMyDomains();
-                                } catch (err: any) {
-                                  try { (await import("sonner")).toast.error(err?.message || "Buy failed"); } catch { /* ignore */ }
-                                } finally { setBusy(false); }
-                              }}
-                              className="flex-1 h-9 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold disabled:opacity-40"
-                            >
-                              BUY NOW
-                            </button>
-                            <button
-                              disabled={busy || isMine}
-                              onClick={() => setBidInputs((p) => ({ ...p, [l.name]: p[l.name] ?? "" }))}
-                              className="flex-1 h-9 rounded-md border border-brand-border text-xs font-bold text-brand-text-primary hover:bg-white/5 disabled:opacity-40"
-                            >
-                              PLACE BID
-                            </button>
+                        <div
+                          key={`${l.name}-${l.seller}`}
+                          className="group rounded-xl border border-brand-border bg-brand-surface overflow-hidden hover:border-emerald-500/40 hover:shadow-2xl hover:shadow-emerald-500/10 transition-all"
+                        >
+                          {/* Card header */}
+                          <div className="relative h-28 bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-transparent flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="text-[9px] font-bold tracking-[0.3em] text-emerald-400">.LIT</div>
+                              <div className="text-xl font-bold text-brand-text-primary mt-0.5 px-3 truncate max-w-[200px]">{l.name}</div>
+                            </div>
+                            {cardBids.length > 0 && (
+                              <span className="absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/60 border border-emerald-500/30 text-[10px] font-semibold text-emerald-300 backdrop-blur-sm">
+                                <TrendingUp size={10} /> {cardBids.length}
+                              </span>
+                            )}
+                            {isMine && (
+                              <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/60 border border-brand-border text-[10px] font-semibold text-brand-text-muted backdrop-blur-sm">
+                                Yours
+                              </span>
+                            )}
                           </div>
-                          {bidInputs[l.name] !== undefined && (
-                            <div className="flex gap-2 mt-2">
-                              <input
-                                value={bidInputs[l.name]}
-                                onChange={(e) => setBidInputs((p) => ({ ...p, [l.name]: e.target.value }))}
-                                placeholder="Enter bid amount (zkLTC)"
-                                className="flex-1 h-8 px-2 rounded-md bg-brand-bg border border-brand-border text-xs text-brand-text-primary outline-none"
-                              />
+                          {/* Card body */}
+                          <div className="p-3.5">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="text-[10px] uppercase tracking-wider text-brand-text-muted font-semibold">Price</div>
+                              <div className="text-[10px] text-brand-text-muted">{l.listedAt ? displayTime(l.listedAt) : ""}</div>
+                            </div>
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-2xl font-bold text-emerald-400 tabular-nums">{l.price}</span>
+                              <span className="text-xs text-brand-text-muted font-semibold">zkLTC</span>
+                            </div>
+                            <div className="text-[11px] text-brand-text-muted mt-1.5 truncate">
+                              by <button
+                                type="button"
+                                onClick={() => { setProfileAddr(l.seller); setProfileTab("listings"); setView("profile"); }}
+                                className="hover:text-brand-text-primary hover:underline transition-colors"
+                              >
+                                {short(l.seller)}
+                              </button>
+                            </div>
+                            {/* Action buttons */}
+                            {!isMine && (
+                              <div className="flex gap-2 mt-3">
+                                <button
+                                  disabled={busy || !wallet}
+                                  onClick={async () => {
+                                    setBusy(true);
+                                    try {
+                                      const r = await fetch(`${API}/hub/market/buy`, {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ name: l.name, buyer: wallet, price: l.price }),
+                                      });
+                                      if (!r.ok) throw new Error("Buy failed");
+                                      setSendToast(`✅ You bought ${l.name}!`);
+                                      setTimeout(() => setSendToast(null), 4000);
+                                      addNotif(wallet, { type: "gf", title: "Domain purchased", message: `Bought ${l.name} for ${l.price} zkLTC`, link: "/chat" });
+                                      addNotif(l.seller, { type: "gf", title: "Domain sold", message: `${short(wallet)} bought ${l.name} for ${l.price} zkLTC`, link: "/chat" });
+                                      await Promise.all([loadListings(), loadSold(), loadMyDomains(), loadBidsByDomain()]);
+                                    } catch (err: any) {
+                                      try { (await import("sonner")).toast.error(err?.message || "Buy failed"); } catch { /* ignore */ }
+                                    } finally { setBusy(false); }
+                                  }}
+                                  className="flex-1 h-9 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold disabled:opacity-40 transition-colors"
+                                >
+                                  Buy Now
+                                </button>
+                                <button
+                                  disabled={busy}
+                                  onClick={() => setBidInputs((p) => ({ ...p, [l.name]: p[l.name] ?? "" }))}
+                                  className="flex-1 h-9 rounded-md border border-brand-border text-xs font-bold text-brand-text-primary hover:bg-white/5 disabled:opacity-40 transition-colors"
+                                >
+                                  Place Bid
+                                </button>
+                              </div>
+                            )}
+                            {isMine && (
                               <button
-                                disabled={busy || !(bidInputs[l.name] || "").trim() || parseFloat(bidInputs[l.name]) <= 0}
-                                onClick={async () => {
-                                  const amount = bidInputs[l.name];
-                                  setBusy(true);
-                                  try {
-                                    const r = await fetch(`${API}/hub/market/bid`, {
-                                      method: "POST",
-                                      headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ domain: l.name, bidder: wallet, amount }),
-                                    });
-                                    if (!r.ok) throw new Error("Bid failed");
-                                    setBids((p) => ({ ...p, [l.name]: [...(p[l.name] || []), { bidder: wallet, amount }] }));
-                                    setBidInputs((p) => { const n = { ...p }; delete n[l.name]; return n; });
-                                  } catch (err: any) {
-                                    try { (await import("sonner")).toast.error(err?.message || "Bid failed"); } catch { /* ignore */ }
-                                  } finally { setBusy(false); }
-                                }}
-                                className="h-8 px-3 rounded-md bg-sky-500 text-white text-xs font-bold disabled:opacity-40"
-                              >Submit</button>
-                            </div>
-                          )}
-                          {cardBids.length > 0 && (
-                            <div className="mt-3 space-y-1 border-t border-brand-border pt-2">
-                              {cardBids.map((b, i) => (
-                                <div key={i} className="text-[11px] text-brand-text-muted">
-                                  <span className="font-semibold text-brand-text-primary">{short(b.bidder)}</span> bid <span className="text-emerald-400 font-semibold">{b.amount} zkLTC</span>
+                                onClick={() => { setProfileAddr(wallet); setProfileTab("listings"); setView("profile"); }}
+                                className="mt-3 w-full h-9 rounded-md border border-brand-border text-xs font-semibold text-brand-text-primary hover:bg-white/5 transition-colors"
+                              >
+                                Manage Listing
+                              </button>
+                            )}
+                            {showBidInput && !isMine && (
+                              <div className="mt-2 space-y-2">
+                                <div className="flex gap-2">
+                                  <input
+                                    autoFocus
+                                    value={bidInputs[l.name]}
+                                    onChange={(e) => setBidInputs((p) => ({ ...p, [l.name]: e.target.value }))}
+                                    placeholder="zkLTC bid"
+                                    inputMode="decimal"
+                                    className="flex-1 h-8 px-2 rounded-md bg-brand-bg border border-brand-border text-xs text-brand-text-primary placeholder:text-brand-text-muted outline-none focus:border-emerald-500/40"
+                                  />
+                                  <button
+                                    disabled={busy || !(bidInputs[l.name] || "").trim() || parseFloat(bidInputs[l.name] || "0") <= 0}
+                                    onClick={async () => {
+                                      const amount = bidInputs[l.name];
+                                      setBusy(true);
+                                      try {
+                                        const r = await fetch(`${API}/hub/market/bid`, {
+                                          method: "POST",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ domain: l.name, bidder: wallet, amount }),
+                                        });
+                                        if (!r.ok) throw new Error("Bid failed");
+                                        addNotif(wallet, { type: "gf", title: "Bid placed", message: `Bid ${amount} zkLTC on ${l.name}`, link: "/chat" });
+                                        addNotif(l.seller, { type: "gf", title: "New bid received", message: `${short(wallet)} bid ${amount} zkLTC on ${l.name}`, link: "/chat" });
+                                        setBidInputs((p) => { const n = { ...p }; delete n[l.name]; return n; });
+                                        await loadBidsByDomain();
+                                      } catch (err: any) {
+                                        try { (await import("sonner")).toast.error(err?.message || "Bid failed"); } catch { /* ignore */ }
+                                      } finally { setBusy(false); }
+                                    }}
+                                    className="h-8 px-3 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold disabled:opacity-40 transition-colors"
+                                  >
+                                    Submit
+                                  </button>
+                                  <button
+                                    onClick={() => setBidInputs((p) => { const n = { ...p }; delete n[l.name]; return n; })}
+                                    aria-label="Cancel bid"
+                                    className="h-8 w-8 rounded-md border border-brand-border text-brand-text-muted hover:text-brand-text-primary inline-flex items-center justify-center"
+                                  >
+                                    <X size={12} />
+                                  </button>
                                 </div>
-                              ))}
-                            </div>
-                          )}
+                              </div>
+                            )}
+                            {cardBids.length > 0 && (
+                              <div className="mt-3 pt-2.5 border-t border-brand-border space-y-1">
+                                <div className="text-[10px] uppercase tracking-wider text-brand-text-muted font-semibold mb-1">Top Bids</div>
+                                {cardBids.slice(0, 2).map((b, i) => (
+                                  <div key={i} className="flex items-center justify-between text-[11px]">
+                                    <span className="text-brand-text-muted truncate">{short(b.bidder)}</span>
+                                    <span className="text-emerald-400 font-semibold tabular-nums shrink-0 ml-2">{b.amount} zkLTC</span>
+                                  </div>
+                                ))}
+                                {cardBids.length > 2 && (
+                                  <div className="text-[10px] text-brand-text-muted">+{cardBids.length - 2} more</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
-                    });
-                  })()}
-                </div>
-              )}
-            </div>
+                    })}
+                  </div>
+                );
+              })()
+            )}
           </div>
 
-          {/* SECTION 3 — Recently Sold ticker */}
+          {/* Recently Sold ticker (kept below navbar via z-[40]) */}
           {soldItems.length > 0 && (
-            <div className="fixed bottom-0 left-0 right-0 z-[91] bg-emerald-500/10 border-t border-emerald-500/30 overflow-hidden">
+            <div className="fixed bottom-0 left-0 right-0 z-[40] bg-emerald-500/10 border-t border-emerald-500/30 overflow-hidden pointer-events-none">
               <div className="flex gap-8 whitespace-nowrap py-2 px-4 animate-[marquee_30s_linear_infinite] text-[11px] text-emerald-300">
-                {soldItems.slice(0, 5).map((s, i) => (
+                {soldItems.slice(0, 8).map((s, i) => (
                   <span key={i}>
-                    <span className="font-semibold">{s.domain}</span> sold for <span className="font-semibold">{s.price} zkLTC</span> · {displayTime(s.soldAt)}
+                    🏷️ <span className="font-semibold">{s.domain}</span> sold for <span className="font-semibold">{s.price} zkLTC</span> · {displayTime(s.soldAt)}
                   </span>
                 ))}
               </div>

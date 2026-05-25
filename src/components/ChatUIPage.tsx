@@ -1060,6 +1060,61 @@ export default function ChatUIPage() {
                   </button>
                 </div>
               )}
+              {tab === "global" && draft.trimStart().toLowerCase().startsWith("/send") && (() => {
+                const parts = draft.trim().split(/\s+/);
+                // parts[0] = /send; parts[1] = token; parts[2] = amount; parts[3] = "to"; parts[4] = recipient
+                const tokenPart = parts[1];
+                const hasToken = !!tokenPart && !!TOKENS[tokenPart.toUpperCase()];
+                const hasAmount = hasToken && !!parts[2] && /^\d+(\.\d+)?$/.test(parts[2]);
+                const step = !hasToken ? 1 : !hasAmount ? 2 : 3;
+                return (
+                  <div className="mx-2 mb-2 rounded-xl border border-gray-700 bg-gray-900 shadow-2xl p-3">
+                    <div className="flex items-center justify-between mb-2 text-[11px] font-semibold">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("px-2 py-0.5 rounded", step === 1 ? "bg-sky-500 text-white" : "text-brand-text-muted")}>1. Token</span>
+                        <span className="text-brand-text-muted">→</span>
+                        <span className={cn("px-2 py-0.5 rounded", step === 2 ? "bg-sky-500 text-white" : "text-brand-text-muted")}>2. Amount</span>
+                        <span className="text-brand-text-muted">→</span>
+                        <span className={cn("px-2 py-0.5 rounded", step === 3 ? "bg-sky-500 text-white" : "text-brand-text-muted")}>3. Recipient</span>
+                      </div>
+                      <button
+                        onClick={() => setDraft("")}
+                        aria-label="Close"
+                        className="p-1 rounded hover:bg-white/10 text-brand-text-muted hover:text-brand-text-primary"
+                      ><X size={12} /></button>
+                    </div>
+                    {step === 1 && (
+                      <>
+                        <div className="text-[11px] text-brand-text-muted mb-2">Select a token</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {TOKEN_LIST.map((k) => {
+                            const t = TOKENS[k];
+                            return (
+                              <button
+                                key={k}
+                                type="button"
+                                onClick={() => {
+                                  setDraft(`/send ${t.symbol} `);
+                                  setTimeout(() => inputRef.current?.focus(), 0);
+                                }}
+                                className="rounded-full px-3 py-1 bg-gray-800 hover:bg-gray-700 text-xs text-brand-text-primary border border-gray-700"
+                              >
+                                {t.symbol}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                    {step === 2 && (
+                      <div className="text-xs text-brand-text-primary">Enter amount of <span className="font-semibold text-sky-400">{TOKENS[tokenPart.toUpperCase()].symbol}</span></div>
+                    )}
+                    {step === 3 && (
+                      <div className="text-xs text-brand-text-primary">Enter recipient .lit name (e.g. <span className="font-mono text-sky-400">to alice.lit</span>)</div>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="relative flex items-center gap-1 px-2 py-2">
                 <IconBtn aria-label="Emoji"><Smile size={18} /></IconBtn>
                 <IconBtn aria-label="Attach"><Paperclip size={18} /></IconBtn>

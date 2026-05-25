@@ -688,7 +688,7 @@ export default function ChatUIPage() {
       setInlineBountyActive(false);
       setInlineLikeReward("");
       setInlineTotalBounty("");
-      setInlineBountyMultiplier(1);
+      setInlineBountyMultiplier("");
       setBountyPopupOpen(false);
       await loadPosts();
     } catch (err) {
@@ -1454,7 +1454,7 @@ export default function ChatUIPage() {
                         setInlineBountyActive(false);
                         setInlineLikeReward("");
                         setInlineTotalBounty("");
-                        setInlineBountyMultiplier(1);
+                        setInlineBountyMultiplier("");
                       }}
                       className="absolute right-0.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-emerald-500/30 text-emerald-300 hover:text-white"
                     >

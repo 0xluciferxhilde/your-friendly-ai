@@ -1091,26 +1091,40 @@ export default function ChatUIPage() {
                             </div>
                           </div>
                           {(() => {
-                            const replyMatch = (post.content || "").match(REPLY_TAG_RE);
-                            if (!replyMatch) {
-                              return <div className="mt-2 whitespace-pre-wrap break-words leading-relaxed">{renderPostContent(post.content)}</div>;
+                            const idMatch = (post.content || "").match(REPLY_ID_RE);
+                            let replyBody = post.content;
+                            let original: { id?: string; author: string; name?: string; content: string } | null = null;
+                            let loadingRef = false;
+                            if (idMatch) {
+                              const refId = idMatch[1];
+                              replyBody = post.content.slice(idMatch[0].length).replace(REPLY_TAG_RE, "");
+                              const inList = posts.find((p) => p.id === refId);
+                              if (inList) original = inList;
+                              else if (fetchedReplyPosts[refId]) original = fetchedReplyPosts[refId];
+                              else loadingRef = true;
+                            } else {
+                              const replyMatch = (post.content || "").match(REPLY_TAG_RE);
+                              if (!replyMatch) {
+                                return <div className="mt-2 whitespace-pre-wrap break-words leading-relaxed">{renderPostContent(post.content)}</div>;
+                              }
+                              const tagBody = replyMatch[1].toLowerCase();
+                              replyBody = post.content.slice(replyMatch[0].length);
+                              const found = posts.find((p) =>
+                                short(p.author).toLowerCase() === tagBody ||
+                                p.author.toLowerCase() === tagBody ||
+                                (p.name || "").toLowerCase() === tagBody
+                              );
+                              if (found) original = found;
                             }
-                            const tagBody = replyMatch[1].toLowerCase();
-                            const replyBody = post.content.slice(replyMatch[0].length);
-                            const original = posts.find((p) =>
-                              short(p.author).toLowerCase() === tagBody ||
-                              p.author.toLowerCase() === tagBody ||
-                              (p.name || "").toLowerCase() === tagBody
-                            );
-                            const previewName = original ? (original.name || short(original.author)) : replyMatch[1];
-                            const previewText = original ? original.content : "Original post not found";
+                            const previewName = original ? (original.name || short(original.author)) : (loadingRef ? "Loading…" : "Original post");
+                            const previewText = original ? original.content : (loadingRef ? "Fetching original post…" : "Original post not found");
                             const previewShort = previewText.length > 100 ? `${previewText.slice(0, 100)}…` : previewText;
                             return (
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => original && scrollToPost(original.id)}
-                                  disabled={!original}
+                                  onClick={() => original?.id && scrollToPost(original.id)}
+                                  disabled={!original?.id}
                                   className="mt-2 block w-full text-left pl-2 pr-2 py-1.5 border-l-4 border-gray-400 bg-gray-700/40 rounded-r-md hover:bg-gray-700/60 transition-colors disabled:cursor-default"
                                 >
                                   <div className="flex items-center gap-1.5 text-[11px] text-brand-text-muted truncate">

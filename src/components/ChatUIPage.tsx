@@ -1,9 +1,9 @@
 // ChatUI page — Private + Global chat tabs powered by LitDEX Hub backend.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowUp,
   Check,
   ChevronUp,
-  DollarSign,
   Globe,
   Heart,
   Menu,
@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { addNotif } from "@/lib/notifications";
+import zkltcLogo from "@/assets/zkltc.jpg";
 
 const API = "https://hub.test-hub.xyz";
 const CHAIN_ID_HEX = "0x1159";

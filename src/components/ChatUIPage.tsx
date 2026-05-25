@@ -32,7 +32,74 @@ import { BrowserProvider, Contract, parseEther } from "ethers";
 
 const API = "https://hub.test-hub.xyz";
 const CHAIN_ID_HEX = "0x1159";
-const RPC_URL = "https://liteforge.rpc.caldera.xyz/http";
+
+// RPC endpoints — pool with auto-failover. The pool rotates whenever an
+// endpoint fails (rate limit, 5xx, network error). Order = priority.
+//
+// To add more endpoints, set VITE_LITEFORGE_RPCS in .env as a comma-
+// separated list. The default Caldera URL is always appended last as a
+// fallback, so single-RPC setups still work.
+const ENV_RPCS = (
+  (import.meta as any).env?.VITE_LITEFORGE_RPCS as string | undefined
+)
+  ?.split(",")
+  .map((s) => s.trim())
+  .filter(Boolean) ?? [];
+const DEFAULT_RPC = "https://liteforge.rpc.caldera.xyz/http";
+const RPC_POOL: string[] = Array.from(new Set([...ENV_RPCS, DEFAULT_RPC]));
+// Mutable cursor — moves to the next URL whenever a request fails.
+let rpcIndex = 0;
+const RPC_URL = RPC_POOL[0]; // for places that only need a static URL (chain add)
+
+/**
+ * fetchRPC — POST a JSON-RPC payload, automatically failing over to the
+ * next endpoint in `RPC_POOL` whenever the current one rate-limits or
+ * errors. Successful responses promote the working endpoint to the front
+ * of the rotation so subsequent calls hit the healthy one first.
+ */
+async function fetchRPC(body: unknown, init?: RequestInit): Promise<Response> {
+  const tried = new Set<number>();
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < RPC_POOL.length; attempt++) {
+    const idx = (rpcIndex + attempt) % RPC_POOL.length;
+    if (tried.has(idx)) continue;
+    tried.add(idx);
+    const url = RPC_POOL[idx];
+    try {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: typeof body === "string" ? body : JSON.stringify(body),
+        ...init,
+      });
+      if (!r.ok) {
+        // 429 / 5xx — rotate to next RPC
+        if (r.status === 429 || r.status >= 500) {
+          rpcIndex = (idx + 1) % RPC_POOL.length;
+          continue;
+        }
+        return r;
+      }
+      // Detect JSON-RPC-level rate limit (Caldera returns 200 + bandwidth msg)
+      const cloned = r.clone();
+      try {
+        const j = await cloned.json();
+        const msg = (j?.error?.message || "").toString().toLowerCase();
+        if (msg.includes("bandwidth") || msg.includes("rate limit") || msg.includes("too many")) {
+          rpcIndex = (idx + 1) % RPC_POOL.length;
+          continue;
+        }
+      } catch { /* not JSON, return raw response */ }
+      // Promote healthy endpoint to front
+      rpcIndex = idx;
+      return r;
+    } catch (err) {
+      lastError = err;
+      rpcIndex = (idx + 1) % RPC_POOL.length;
+    }
+  }
+  throw lastError ?? new Error("All RPC endpoints failed");
+}
 const HUB_POSTS_ADDRESS = "0x33690545061cF3759350dd2C5A0d1080D9A14D73";
 const LIT_REGISTRY_ADDRESS = "0x3E3aEE6d154f881A7418b2dA50c915C34664C2A8";
 const MESSENGER_ADDRESS = "0x69405b51963D592C6CA9350F774045d4E76c89B8";
@@ -500,10 +567,11 @@ export default function ChatUIPage() {
       // 3) zkLTC native balance via JSON-RPC
       (async () => {
         try {
-          const r = await fetch(RPC_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [profileAddr, "latest"] }),
+          const r = await fetchRPC({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "eth_getBalance",
+            params: [profileAddr, "latest"],
           });
           const j = await r.json();
           if (!cancelled) {
@@ -919,10 +987,11 @@ export default function ChatUIPage() {
   }, []);
 
   const readContract = useCallback(async (address: string, data: string) => {
-    const result = await fetch(RPC_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: address, data }, "latest"] }),
+    const result = await fetchRPC({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_call",
+      params: [{ to: address, data }, "latest"],
     });
     const json = await result.json();
     if (json.error) throw new Error(json.error.message || "Contract read failed");
@@ -938,10 +1007,50 @@ export default function ChatUIPage() {
     return hash as string;
   }, [ensureChain]);
 
+  // Hydrate the in-memory name cache from localStorage on mount so we don't
+  // re-RPC the same names every page navigation. Backed by /hub/name/reverse
+  // (DB-fast) + an on-chain fallback. Persisted lazily in resolveName below.
+  const NAMES_CACHE_KEY = "litdex:names";
+  useEffect(() => {
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem(NAMES_CACHE_KEY) : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          namesRef.current = { ...parsed, ...namesRef.current };
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  const persistNames = useCallback(() => {
+    try {
+      // Cap at 200 entries to keep storage small.
+      const all = Object.entries(namesRef.current).slice(-200);
+      const obj: Record<string, string> = {};
+      for (const [k, v] of all) obj[k] = v;
+      localStorage.setItem(NAMES_CACHE_KEY, JSON.stringify(obj));
+    } catch { /* quota / SSR */ }
+  }, []);
+
   const resolveName = useCallback(async (address: string) => {
     if (!address) return "";
     const key = address.toLowerCase();
     if (namesRef.current[key]) return namesRef.current[key];
+    // 1) Try the backend DB-cached resolver first — zero RPC cost.
+    try {
+      const r = await fetch(`${API}/hub/name/reverse/${key}`);
+      if (r.ok) {
+        const j = await r.json();
+        const n = j?.name || j?.litName || j?.data?.name || "";
+        if (typeof n === "string" && n) {
+          namesRef.current[key] = n;
+          persistNames();
+          return n;
+        }
+      }
+    } catch { /* fall through to chain */ }
+    // 2) Fallback: on-chain reverseResolve via the RPC pool.
     try {
       const data = encodeCall(SELECTOR.reverseResolve, [{ type: "address", value: address }]);
       const name = decodeString(await readContract(LIT_REGISTRY_ADDRESS, data));
@@ -949,8 +1058,9 @@ export default function ChatUIPage() {
     } catch {
       namesRef.current[key] = short(address);
     }
+    persistNames();
     return namesRef.current[key];
-  }, [readContract]);
+  }, [readContract, persistNames]);
 
   const mapContact = useCallback(async (item: any): Promise<Contact | null> => {
     const address = typeof item === "string" ? item : item.address || item.wallet || item.walletAddress || item.friend || item.from || item.to || "";
@@ -1127,14 +1237,22 @@ export default function ChatUIPage() {
     }
   }, [current?.address, wallet]);
 
+  // Poll cadence: keep messaging snappy but don't hammer the chain. Posts
+  // and conversations are DB-backed (fast + cheap), so we can poll them
+  // often. Friend list pulls direct RPC (pending requests), so we poll it
+  // less aggressively. We also pause every interval when the tab is hidden.
+  const isVisible = () => typeof document === "undefined" || document.visibilityState === "visible";
+
   useEffect(() => {
     if (tab === "global") {
       loadPosts();
-      const id = setInterval(loadPosts, 8_000);
+      const id = setInterval(() => { if (isVisible()) loadPosts(); }, 8_000);
       return () => clearInterval(id);
     }
     loadPrivate();
-    const id = setInterval(loadPrivate, 15_000);
+    // Friend list + pending requests poll. 30s is plenty — the message
+    // poll below already keeps the active conversation fresh.
+    const id = setInterval(() => { if (isVisible()) loadPrivate(); }, 30_000);
     return () => clearInterval(id);
   }, [loadPosts, loadPrivate, tab]);
 
@@ -1150,8 +1268,13 @@ export default function ChatUIPage() {
   useEffect(() => {
     if (tab !== "private" || !current) return;
     loadConversation();
-    const id = setInterval(loadConversation, 15_000);
-    return () => clearInterval(id);
+    // DB-backed endpoint, cheap — keep at ~5s for snappy DM feel and pause
+    // when the tab is hidden.
+    const isVisibleNow = () => typeof document === "undefined" || document.visibilityState === "visible";
+    const id = setInterval(() => { if (isVisibleNow()) loadConversation(); }, 5_000);
+    const onVis = () => { if (isVisibleNow()) loadConversation(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
   }, [current, loadConversation, tab]);
 
   useEffect(() => {
@@ -1419,10 +1542,11 @@ export default function ChatUIPage() {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       try {
-        const r = await fetch(RPC_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt", params: [hash] }),
+        const r = await fetchRPC({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "eth_getTransactionReceipt",
+          params: [hash],
         });
         const j = await r.json();
         if (j?.result) return j.result;
@@ -1586,10 +1710,11 @@ export default function ChatUIPage() {
     if (!token) { setSendBalance("0"); return; }
     try {
       if (token.address === null) {
-        const r = await fetch(RPC_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [wallet, "latest"] }),
+        const r = await fetchRPC({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "eth_getBalance",
+          params: [wallet, "latest"],
         });
         const j = await r.json();
         setSendBalance(formatUnitsStr(BigInt(j.result || "0x0"), 18));

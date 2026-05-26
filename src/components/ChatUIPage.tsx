@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 import { addNotif } from "@/lib/notifications";
 import { showSuccess, showError } from "@/lib/feedback";
 import zkltcLogo from "@/assets/zkltc.jpg";
-import { BrowserProvider, Contract, parseEther } from "ethers";
+import { BrowserProvider, Contract, JsonRpcProvider, parseEther } from "ethers";
 
 const API = "https://hub.test-hub.xyz";
 const CHAIN_ID_HEX = "0x1159";
@@ -156,6 +156,14 @@ const MESSENGER_READ_ABI = [
   "function friendRequests(uint256) external view returns (address from, address to, uint8 status, uint256 sentAt)",
   "function reverseResolve(address) external view returns (string)",
 ] as const;
+
+// Read-only messenger contract using a public JSON-RPC provider — used to
+// walk requestCount/friendRequests for incoming requests. Uses the active
+// RPC pool entry so failover still applies.
+function getReadMessenger() {
+  const provider = new JsonRpcProvider(RPC_POOL[rpcIndex] || RPC_POOL[0]);
+  return new Contract(MESSENGER_ADDRESS, MESSENGER_READ_ABI, provider);
+}
 
 const BUY_DURATION_OPTIONS: { value: number; label: string; price: string; tag?: string }[] = [
   { value: 1,  label: "1 Year",   price: "0.05" },
@@ -1320,23 +1328,38 @@ export default function ChatUIPage() {
       // The contract's getPendingRequests(addr) returns a *count*, not the
       // ID list — that's why receivers never saw incoming requests in the
       // sidebar. Walk the global requestCount() and pick rows where
-      // to == me && status == pending.
-      const totalHex = await readContract(MESSENGER_ADDRESS, encodeCall(SELECTOR.requestCount, []));
-      const total = Number(BigInt(totalHex || "0x0"));
+      // to == me && status == pending. Use ethers Contract directly so
+      // we don't depend on hand-rolled function selectors.
+      const c = getReadMessenger();
+      const total = Number(await c.requestCount().catch(() => 0n));
       const out: PendingRequest[] = [];
       const max = Math.min(total, 200);
       const meLc = wallet.toLowerCase();
       for (let i = total; i > total - max && i > 0; i--) {
         try {
-          const raw = await readContract(MESSENGER_ADDRESS, encodeCall(SELECTOR.friendRequests, [{ type: "uint", value: i }]));
-          const req = decodeFriendRequest(raw);
-          if ((req.to || "").toLowerCase() !== meLc) continue;
-          if (Number(req.status) !== 0) continue; // 0 = pending
-          out.push({ id: String(i), from: req.from, to: req.to, status: req.status, sentAt: req.sentAt, name: await resolveName(req.from) });
+          const r = await c.friendRequests(i);
+          // Tuple: from, to, status (uint8), sentAt
+          const toAddr = String(r[1] || (r as any).to || "");
+          const status = Number(r[2] ?? (r as any).status ?? 0);
+          if (toAddr.toLowerCase() !== meLc) continue;
+          if (status !== 0) continue; // 0 = pending
+          const fromAddr = String(r[0] || (r as any).from || "");
+          const sentAt = Number(r[3] ?? (r as any).sentAt ?? 0);
+          out.push({
+            id: String(i),
+            from: fromAddr,
+            to: toAddr,
+            status,
+            sentAt,
+            name: await resolveName(fromAddr),
+          });
         } catch { /* skip bad row */ }
       }
       setPending(out);
-    } catch { setPending([]); }
+    } catch (err) {
+      console.error("[ChatUI] loadPending walk failed", err);
+      // Don't blank the list — keep last good state.
+    }
   }, [mapContact, resolveName, wallet]);
 
   const loadConversation = useCallback(async () => {
@@ -1701,47 +1724,66 @@ export default function ChatUIPage() {
   };
 
   const addFriend = async () => {
-    let clean = friendName.trim().replace(/^@/, "").toLowerCase();
-    // Strip optional ".lit" suffix so the resolver gets the bare name.
-    if (clean.endsWith(".lit")) clean = clean.slice(0, -4);
-    if (!clean) {
-      showError("Enter a .lit name");
+    const raw = friendName.trim().replace(/^@/, "");
+    if (!raw) {
+      showError("Enter a wallet address or .lit name");
       return;
     }
     setBusy(true);
     try {
-      // Resolve .lit -> wallet. Empty / zero / null means the name isn't
-      // registered, so we refuse to send the request and tell the user.
-      const r = await fetch(`${API}/hub/name/resolve/${encodeURIComponent(clean)}`);
       let resolved = "";
-      if (r.ok) {
-        const j = await r.json();
-        resolved = j?.address || j?.wallet || j?.walletAddress || j?.data?.address || "";
+      let displayLabel = raw; // what to show in toast / outgoing list
+      const isAddress = /^0x[0-9a-fA-F]{40}$/.test(raw);
+
+      if (isAddress) {
+        // Direct wallet address. Use as-is, then try to reverse-resolve a
+        // .lit name for display purposes only.
+        resolved = raw;
+        try {
+          const reverse = await fetch(`${API}/hub/name/reverse/${raw.toLowerCase()}`);
+          if (reverse.ok) {
+            const rj = await reverse.json();
+            const litName = rj?.name || rj?.litName || rj?.data?.name || "";
+            if (typeof litName === "string" && litName) displayLabel = litName;
+          }
+        } catch { /* keep address as label */ }
+      } else {
+        // Treat as .lit name. Strip optional ".lit" suffix and resolve.
+        let clean = raw.toLowerCase();
+        if (clean.endsWith(".lit")) clean = clean.slice(0, -4);
+        const r = await fetch(`${API}/hub/name/resolve/${encodeURIComponent(clean)}`);
+        if (r.ok) {
+          const j = await r.json();
+          resolved = j?.address || j?.wallet || j?.walletAddress || j?.data?.address || "";
+        }
+        const ZERO = "0x0000000000000000000000000000000000000000";
+        if (!resolved || resolved.toLowerCase() === ZERO) {
+          showError(`${clean}.lit is not registered on LitDEX`);
+          return;
+        }
+        displayLabel = clean;
       }
-      const ZERO = "0x0000000000000000000000000000000000000000";
-      if (!resolved || resolved.toLowerCase() === ZERO) {
-        showError(`${clean}.lit is not registered on LitDEX`);
-        return;
-      }
+
       if (resolved.toLowerCase() === wallet.toLowerCase()) {
         showError("You can't friend yourself");
         return;
       }
-      const txHash = await writeContract(MESSENGER_ADDRESS, encodeCall(SELECTOR.sendFriendRequest, [{ type: "address", value: resolved }]));
+      const txHash = await writeContract(
+        MESSENGER_ADDRESS,
+        encodeCall(SELECTOR.sendFriendRequest, [{ type: "address", value: resolved }]),
+      );
       setFriendName("");
       setAddFriendOpen(false);
       // Track outbound — the sidebar badge will show pending/accepted/rejected.
       setOutgoing((prev) => {
         const lcTo = resolved.toLowerCase();
-        // De-dupe: drop any prior entry to same address (re-send case),
-        // keep the new pending one.
         const filtered = prev.filter((r) => r.to !== lcTo);
         return [
           ...filtered,
           {
             id: `out-${Date.now()}`,
             to: lcTo,
-            name: clean,
+            name: displayLabel,
             txHash: typeof txHash === "string" ? txHash : undefined,
             sentAt: Math.floor(Date.now() / 1000),
             status: "pending",
@@ -1752,7 +1794,7 @@ export default function ChatUIPage() {
         title: "FRIEND REQUEST SENT",
         subtitle: "WAITING FOR ACCEPTANCE",
         rows: [
-          { label: "TO", value: `${clean}.lit` },
+          { label: "TO", value: displayLabel.startsWith("0x") ? short(displayLabel) : `${displayLabel}.lit` },
           { label: "TX", value: `${String(txHash).slice(0, 10)}...` },
         ],
       });
@@ -2960,7 +3002,18 @@ export default function ChatUIPage() {
 
       {addFriendOpen && (
         <Modal title="Add Friend" onClose={() => setAddFriendOpen(false)}>
-          <input value={friendName} onChange={(e) => setFriendName(e.target.value)} placeholder="name.lit" className="w-full h-10 rounded-md bg-brand-bg border border-brand-border px-3 text-sm text-brand-text-primary placeholder:text-brand-text-muted outline-none" />
+          <input
+            value={friendName}
+            onChange={(e) => setFriendName(e.target.value)}
+            placeholder="0xAddress or name.lit"
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+            className="w-full h-10 rounded-md bg-brand-bg border border-brand-border px-3 text-sm text-brand-text-primary placeholder:text-brand-text-muted outline-none"
+          />
+          <p className="mt-2 text-[11px] text-brand-text-muted">
+            Paste a wallet address or a registered .lit name.
+          </p>
           <button disabled={busy} onClick={addFriend} className="mt-4 w-full h-10 rounded-md bg-brand-teal text-brand-bg text-sm font-semibold disabled:opacity-50">Send request</button>
         </Modal>
       )}

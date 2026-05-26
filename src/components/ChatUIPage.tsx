@@ -1143,6 +1143,72 @@ export default function ChatUIPage() {
     });
   }, [wallet]);
 
+  // Cancel my own bid on a listing. Calls marketplace.cancelBid() which
+  // refunds the locked zkLTC back to the bidder. Used by:
+  //   - Bidder's "Cancel my bid" button on a market card.
+  //   - Bidder side after a seller's "Reject" notification (the seller
+  //     can't actually move the bidder's funds, so the bidder must run
+  //     this themselves to get a refund).
+  const cancelMyBid = useCallback(async (domain: string) => {
+    if (!wallet) return;
+    setBusy(true);
+    try {
+      const c = await getMarketplaceContract();
+      console.log("[Market] cancelBid()", { domain });
+      const tx = await c.cancelBid(domain);
+      console.log("[Market] cancelBid: tx submitted", tx.hash);
+      await tx.wait();
+      console.log("[Market] cancelBid: confirmed");
+      addNotif(wallet, {
+        type: "gf",
+        title: "Bid cancelled",
+        message: `Your bid on ${domain}.lit was refunded`,
+        link: "/chat",
+      });
+      // Drop my bid from local state immediately.
+      setBidsByDomain((prev) => {
+        const next = { ...prev };
+        if (next[domain]) {
+          next[domain] = next[domain].filter((b) => b.bidder.toLowerCase() !== wallet.toLowerCase());
+        }
+        return next;
+      });
+      await loadBidsByDomain();
+      showSuccess({
+        title: "BID CANCELLED",
+        subtitle: "FUNDS REFUNDED",
+        rows: [
+          { label: "NAME", value: `${domain}.lit` },
+          { label: "TX", value: `${tx.hash.slice(0, 10)}...` },
+        ],
+      });
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.reason || err?.message || "Cancel failed";
+      showError(msg);
+    } finally { setBusy(false); }
+  }, [wallet, loadBidsByDomain]);
+
+  // Filter stale bids — when a seller unlists then relists, the
+  // marketplace's `bids[name]` array is preserved on-chain, so old bids
+  // from a previous listing cycle leak into the new one. We trust only
+  // bids placed AT OR AFTER the current active listing's listedAt.
+  const activeBidsFor = useCallback((name: string) => {
+    const all = bidsByDomain[name] || [];
+    const listing = listingsFull.find((l) => l.name === name);
+    if (!listing) return all;
+    const cutoff = Number(listing.listedAt || 0);
+    if (!cutoff) return all;
+    return all.filter((b) => Number(b.bidAt || 0) >= cutoff);
+  }, [bidsByDomain, listingsFull]);
+
+  // Helper: do I currently have an active bid on `name`? (Filters out
+  // stale bids from a previous listing of the same domain.)
+  const myBidFor = useCallback((name: string) => {
+    if (!wallet) return null;
+    const list = activeBidsFor(name);
+    return list.find((b) => b.bidder.toLowerCase() === wallet.toLowerCase()) || null;
+  }, [activeBidsFor, wallet]);
+
   useEffect(() => {
     if (view !== "market") return;
     loadListings();
@@ -3380,7 +3446,14 @@ export default function ChatUIPage() {
             {(() => {
               const isMe = profileAddr.toLowerCase() === wallet.toLowerCase();
               const myListings = listingsFull.filter((l) => l.seller?.toLowerCase() === profileAddr.toLowerCase());
-              const incomingBids = isMe ? bidsForOwner : [];
+              // Filter out stale bids — a relisted name's `bids[]` array is
+              // preserved on-chain, so we drop any incoming bid placed
+              // before the current active listing's listedAt.
+              const incomingBids = (isMe ? bidsForOwner : []).filter((b) => {
+                const listing = listingsFull.find((l) => l.name === b.domain);
+                if (!listing) return false; // listing gone = bid stale
+                return Number(b.bidAt || 0) >= Number(listing.listedAt || 0);
+              });
               const tabs: Array<{ key: typeof profileTab; label: string; badge?: number; show: boolean }> = [
                 { key: "domains", label: "Domains", badge: profileDomains.length, show: true },
                 { key: "listings", label: "My Listings", badge: myListings.length, show: true },
@@ -3488,7 +3561,7 @@ export default function ChatUIPage() {
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {myListings.map((l) => {
-                            const cardBids = bidsByDomain[l.name] || [];
+                            const cardBids = activeBidsFor(l.name);
                             return (
                               <div key={`${l.name}-${l.listedAt}`} className="rounded-xl border border-brand-border bg-brand-surface p-4">
                                 <div className="flex items-start justify-between mb-2">
@@ -3675,8 +3748,15 @@ export default function ChatUIPage() {
               );
             })()}
 
-            {/* Incoming bids alert (only when user has any) */}
-            {bidsForOwner.length > 0 && (
+            {/* Incoming bids alert — filtered for stale bids that linger
+                from a previous list/unlist cycle of the same name. */}
+            {(() => {
+              const fresh = bidsForOwner.filter((b) => {
+                const listing = listingsFull.find((l) => l.name === b.domain);
+                return listing && Number(b.bidAt || 0) >= Number(listing.listedAt || 0);
+              });
+              if (fresh.length === 0) return null;
+              return (
               <button
                 onClick={() => { setProfileAddr(wallet); setProfileTab("bids"); setView("profile"); }}
                 className="w-full mb-5 rounded-xl border border-brand-border bg-white/5 hover:bg-white/10 px-4 py-3 flex items-center gap-3 text-left transition-colors"
@@ -3686,13 +3766,14 @@ export default function ChatUIPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-brand-text-primary">
-                    {bidsForOwner.length} pending bid{bidsForOwner.length === 1 ? "" : "s"} on your listing{bidsForOwner.length === 1 ? "" : "s"}
+                    {fresh.length} pending bid{fresh.length === 1 ? "" : "s"} on your listing{fresh.length === 1 ? "" : "s"}
                   </div>
                   <div className="text-[11px] text-brand-text-muted">Tap to review and accept or reject</div>
                 </div>
                 <ChevronRight size={18} className="text-brand-text-primary" />
               </button>
-            )}
+              );
+            })()}
 
           {/* Recently Sold inline ticker (moved from bottom — sits above
               listings so the bottom navbar / page chrome is never overlaid). */}
@@ -3888,12 +3969,12 @@ export default function ChatUIPage() {
                             >
                               Unlist
                             </button>
-                            {(bidsByDomain[d]?.length || 0) > 0 && (
+                            {(activeBidsFor(d).length || 0) > 0 && (
                               <button
                                 onClick={() => { setProfileAddr(wallet); setProfileTab("bids"); setView("profile"); }}
                                 className="flex-1 h-9 rounded-md bg-white text-black hover:bg-white/90 text-xs font-bold transition-colors"
                               >
-                                {bidsByDomain[d]?.length} bid{(bidsByDomain[d]?.length || 0) === 1 ? "" : "s"}
+                                {activeBidsFor(d).length} bid{activeBidsFor(d).length === 1 ? "" : "s"}
                               </button>
                             )}
                           </div>
@@ -3997,7 +4078,7 @@ export default function ChatUIPage() {
                 return (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                     {sorted.map((l) => {
-                      const cardBids = bidsByDomain[l.name] || [];
+                      const cardBids = activeBidsFor(l.name);
                       const isMine = l.seller?.toLowerCase() === wallet.toLowerCase();
                       const showBidInput = bidInputs[l.name] !== undefined;
                       return (
@@ -4042,49 +4123,79 @@ export default function ChatUIPage() {
                               </button>
                             </div>
                             {/* Action buttons */}
-                            {!isMine && (
-                              <div className="flex gap-2 mt-3">
-                                <button
-                                  disabled={busy || !wallet}
-                                  onClick={async () => {
-                                    setBusy(true);
-                                    try {
-                                      const c = await getMarketplaceContract();
-                                      const priceWei = parseEther(l.price);
-                                      console.log("[Market] buyName()", { name: l.name, price: l.price });
-                                      const tx = await c.buyName(l.name, { value: priceWei });
-                                      await tx.wait();
-                                      console.log("[Market] buy confirmed");
-                                      addNotif(wallet, { type: "gf", title: "Domain purchased", message: `Bought ${l.name} for ${l.price} zkLTC`, link: "/chat" });
-                                      addNotif(l.seller, { type: "gf", title: "Domain sold", message: `${short(wallet)} bought ${l.name} for ${l.price} zkLTC`, link: "/chat" });
-                                      await Promise.all([loadListings(), loadMyDomains(), loadBidsByDomain()]);
-                                      showSuccess({
-                                        title: "DOMAIN PURCHASED",
-                                        subtitle: "WELCOME TO YOUR NEW NAME",
-                                        rows: [
-                                          { label: "NAME", value: `${l.name}.lit` },
-                                          { label: "PRICE", value: `${l.price} zkLTC` },
-                                          { label: "TX", value: `${tx.hash.slice(0, 10)}...` },
-                                        ],
-                                      });
-                                    } catch (err: any) {
-                                      const msg = err?.shortMessage || err?.reason || err?.message || "Buy failed";
-                                      showError(msg);
-                                    } finally { setBusy(false); }
-                                  }}
-                                  className="flex-1 h-9 rounded-md bg-white text-black hover:bg-white/90 text-xs font-bold disabled:opacity-40 transition-colors"
-                                >
-                                  Buy Now
-                                </button>
-                                <button
-                                  disabled={busy}
-                                  onClick={() => setBidInputs((p) => ({ ...p, [l.name]: p[l.name] ?? "" }))}
-                                  className="flex-1 h-9 rounded-md border border-brand-border text-xs font-bold text-brand-text-primary hover:bg-white/5 disabled:opacity-40 transition-colors"
-                                >
-                                  Place Bid
-                                </button>
-                              </div>
-                            )}
+                            {!isMine && (() => {
+                              const myBid = myBidFor(l.name);
+                              return (
+                                <div className="flex flex-col gap-2 mt-3">
+                                  {myBid && (
+                                    <div className="text-[11px] rounded-md border border-brand-border bg-white/5 px-3 py-2 flex items-center justify-between gap-2">
+                                      <span className="text-brand-text-muted">
+                                        Your bid: <span className="font-bold text-brand-text-primary tabular-nums">{myBid.amount} zkLTC</span>
+                                      </span>
+                                      <button
+                                        disabled={busy}
+                                        onClick={() => cancelMyBid(l.name)}
+                                        className="text-[10px] uppercase tracking-wider font-bold text-brand-text-primary hover:text-brand-danger transition-colors disabled:opacity-50"
+                                      >
+                                        Cancel · Refund
+                                      </button>
+                                    </div>
+                                  )}
+                                  <div className="flex gap-2">
+                                    <button
+                                      disabled={busy || !wallet}
+                                      onClick={async () => {
+                                        setBusy(true);
+                                        try {
+                                          const c = await getMarketplaceContract();
+                                          const priceWei = parseEther(l.price);
+                                          console.log("[Market] buyName()", { name: l.name, price: l.price });
+                                          const tx = await c.buyName(l.name, { value: priceWei });
+                                          await tx.wait();
+                                          console.log("[Market] buy confirmed");
+                                          addNotif(wallet, { type: "gf", title: "Domain purchased", message: `Bought ${l.name} for ${l.price} zkLTC`, link: "/chat" });
+                                          addNotif(l.seller, { type: "gf", title: "Domain sold", message: `${short(wallet)} bought ${l.name} for ${l.price} zkLTC`, link: "/chat" });
+                                          await Promise.all([loadListings(), loadMyDomains(), loadBidsByDomain()]);
+                                          showSuccess({
+                                            title: "DOMAIN PURCHASED",
+                                            subtitle: "WELCOME TO YOUR NEW NAME",
+                                            rows: [
+                                              { label: "NAME", value: `${l.name}.lit` },
+                                              { label: "PRICE", value: `${l.price} zkLTC` },
+                                              { label: "TX", value: `${tx.hash.slice(0, 10)}...` },
+                                            ],
+                                          });
+                                        } catch (err: any) {
+                                          const msg = err?.shortMessage || err?.reason || err?.message || "Buy failed";
+                                          showError(msg);
+                                        } finally { setBusy(false); }
+                                      }}
+                                      className="flex-1 h-9 rounded-md bg-white text-black hover:bg-white/90 text-xs font-bold disabled:opacity-40 transition-colors"
+                                    >
+                                      Buy Now
+                                    </button>
+                                    {!myBid && (
+                                      <button
+                                        disabled={busy}
+                                        onClick={() => setBidInputs((p) => ({ ...p, [l.name]: p[l.name] ?? "" }))}
+                                        className="flex-1 h-9 rounded-md border border-brand-border text-xs font-bold text-brand-text-primary hover:bg-white/5 disabled:opacity-40 transition-colors"
+                                      >
+                                        Place Bid
+                                      </button>
+                                    )}
+                                    {myBid && (
+                                      <button
+                                        disabled={busy}
+                                        onClick={() => cancelMyBid(l.name)}
+                                        className="flex-1 h-9 rounded-md border border-brand-border text-xs font-bold text-brand-text-primary hover:bg-white/5 disabled:opacity-40 transition-colors"
+                                      >
+                                        Cancel My Bid
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                             {isMine && (
                               <button
                                 onClick={() => { setProfileAddr(wallet); setProfileTab("listings"); setView("profile"); }}

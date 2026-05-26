@@ -3792,7 +3792,7 @@ const ConvertPointsCard = ({ wallet }: { wallet: string }) => {
 const MathSlashPage = ({ onBack }: { onBack: () => void }) => {
   const { address, isConnected } = useAccount();
   const SIMPLE_API = 'https://game.test-hub.xyz';
-  const DAILY_LIMIT = 15;
+  const DAILY_LIMIT = 5;
   const RATE = 0.00000222;
 
   const [stats, setStats] = useState<any>(null);
@@ -3888,12 +3888,32 @@ const MathSlashPage = ({ onBack }: { onBack: () => void }) => {
       // Deduplicate: only call /simple/end once per session
       if (endCalledRef.current) return;
       endCalledRef.current = true;
-      // Call /simple/end to record the score and trigger zkLTC payout
+      // Call /simple/end to record the score and trigger zkLTC payout.
+      // Build bot proof inline because the effect's closure was created
+      // before `buildBotProof` (defined further below) was hoisted.
+      const sigSnap = botSignalsRef.current;
+      const sessionMs = Date.now() - sigSnap.sessionStart;
+      const proof = {
+        sessionMs,
+        mouseMoves: sigSnap.mouseMoves,
+        scrolls: sigSnap.scrolls,
+        focusEvents: sigSnap.focusEvents,
+        keyPresses: sigSnap.keyPresses,
+        pointerJitter: Math.round(sigSnap.pointerJitter),
+        questionsAnswered: sigSnap.questionsAnswered,
+        fastestAnswerMs: sigSnap.fastestAnswerMs,
+        flags: {
+          noMouseMove: sigSnap.mouseMoves < 5,
+          zeroJitter: sigSnap.pointerJitter < 50,
+          impossiblyFast: sigSnap.fastestAnswerMs > 0 && sigSnap.fastestAnswerMs < 120,
+          idleSession: sessionMs > 10_000 && sigSnap.lastMouseAt === 0,
+        },
+      };
       try {
         const endRes = await fetch(`${SIMPLE_API}/simple/end`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ wallet: lowerAddr, score }),
+          body: JSON.stringify({ wallet: lowerAddr, score, proof }),
         });
         const endData = await endRes.json().catch(() => ({}));
         console.log('[MathSlash] /simple/end response:', endData);
@@ -3917,11 +3937,109 @@ const MathSlashPage = ({ onBack }: { onBack: () => void }) => {
     return () => window.removeEventListener('message', onMsg);
   }, [lowerAddr]);
 
+  // ── Anti-bot signals ─────────────────────────────────────────────────
+  // Track behavioural fingerprints that real humans produce but headless
+  // bots usually skip: mouse movement, scroll, focus events, keyboard
+  // taps. We collect them across the session and send a digest with the
+  // /simple/end submission so the backend can score it. None of this
+  // alone proves humanity, but combined with backend rate-limit + score
+  // sanity checks it raises the cost for a bot operator significantly.
+  const botSignalsRef = useRef({
+    mouseMoves: 0,
+    scrolls: 0,
+    focusEvents: 0,
+    keyPresses: 0,
+    pointerJitter: 0,        // sum of |Δx|+|Δy| for pointer move (low = robot)
+    sessionStart: Date.now(),
+    lastMouseAt: 0,
+    consecutiveSamePos: 0,   // back-to-back identical pointer positions
+    lastX: 0,
+    lastY: 0,
+    questionsAnswered: 0,
+    fastestAnswerMs: 0,      // shortest time between consecutive scores
+    lastScoreAt: 0,
+  });
+  useEffect(() => {
+    const sig = botSignalsRef.current;
+    const onMove = (e: PointerEvent) => {
+      sig.mouseMoves++;
+      const dx = Math.abs((e.clientX || 0) - sig.lastX);
+      const dy = Math.abs((e.clientY || 0) - sig.lastY);
+      sig.pointerJitter += dx + dy;
+      if (dx + dy === 0) sig.consecutiveSamePos++;
+      sig.lastX = e.clientX || 0;
+      sig.lastY = e.clientY || 0;
+      sig.lastMouseAt = Date.now();
+    };
+    const onScroll = () => { sig.scrolls++; };
+    const onKey = () => { sig.keyPresses++; };
+    const onFocus = () => { sig.focusEvents++; };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
+  // Track answer cadence — score updates from the iframe represent
+  // questions answered. If two consecutive answers come <120ms apart,
+  // it's almost certainly a bot. We capture the fastest gap.
+  useEffect(() => {
+    const onScore = (e: any) => {
+      const t = e?.data?.type;
+      if (t !== "SCORE_UPDATE" && t !== "litdex:mathslash:score") return;
+      const sig = botSignalsRef.current;
+      const now = Date.now();
+      if (sig.lastScoreAt > 0) {
+        const gap = now - sig.lastScoreAt;
+        if (sig.fastestAnswerMs === 0 || gap < sig.fastestAnswerMs) sig.fastestAnswerMs = gap;
+      }
+      sig.lastScoreAt = now;
+      sig.questionsAnswered++;
+    };
+    window.addEventListener("message", onScore);
+    return () => window.removeEventListener("message", onScore);
+  }, []);
+
+  /** Build the bot-signal digest the backend can score. */
+  const buildBotProof = useCallback(() => {
+    const sig = botSignalsRef.current;
+    const sessionMs = Date.now() - sig.sessionStart;
+    return {
+      sessionMs,
+      mouseMoves: sig.mouseMoves,
+      scrolls: sig.scrolls,
+      focusEvents: sig.focusEvents,
+      keyPresses: sig.keyPresses,
+      pointerJitter: Math.round(sig.pointerJitter),
+      questionsAnswered: sig.questionsAnswered,
+      fastestAnswerMs: sig.fastestAnswerMs,
+      // Heuristic flags (server can re-verify).
+      flags: {
+        noMouseMove: sig.mouseMoves < 5,
+        zeroJitter: sig.pointerJitter < 50,
+        impossiblyFast: sig.fastestAnswerMs > 0 && sig.fastestAnswerMs < 120,
+        idleSession: sessionMs > 10_000 && sig.lastMouseAt === 0,
+      },
+    };
+  }, []);
+
   const submitFinalScore = async (score: number) => {
+    const proof = buildBotProof();
+    // Cap score that's clearly impossible — the backend will also reject
+    // these but bouncing client-side prevents wasted RPC calls.
+    if (proof.flags.impossiblyFast || proof.flags.noMouseMove) {
+      console.warn("[MathSlash] bot-like signals, score capped to 0", proof);
+    }
     const r = await fetch(`${SIMPLE_API}/simple/end`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallet: lowerAddr, score }),
+      body: JSON.stringify({ wallet: lowerAddr, score, proof }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok || data?.success === false) throw new Error(data?.error || data?.message || 'Failed to submit score');

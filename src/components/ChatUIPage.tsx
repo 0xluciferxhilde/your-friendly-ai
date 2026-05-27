@@ -513,6 +513,63 @@ export default function ChatUIPage() {
   const [view, setView] = useState<"chat" | "profile" | "market" | "buy">("chat");
   const [profileAddr, setProfileAddr] = useState<string>("");
   const [myDisplayName, setMyDisplayName] = useState<string>("");
+
+  // ── Hub URL routing ───────────────────────────────────────────────
+  // Sub-paths under /hub map to (view, tab) pairs:
+  //   /hub               → chat + global   (default)
+  //   /hub/private       → chat + private
+  //   /hub/global        → chat + global
+  //   /hub/market        → market
+  //   /hub/buy           → buy
+  //   /hub/profile       → profile (current wallet by default)
+  // We keep this lightweight — the source of truth stays React state,
+  // we just push/pop history when the user clicks around.
+  useEffect(() => {
+    const hydrate = () => {
+      const path = window.location.pathname;
+      if (!path.startsWith('/hub')) return;
+      const seg = path.split('/').filter(Boolean)[1] || '';
+      switch (seg) {
+        case '':
+          setView('chat');
+          setTab('global');
+          break;
+        case 'private':
+          setView('chat');
+          setTab('private');
+          break;
+        case 'global':
+          setView('chat');
+          setTab('global');
+          break;
+        case 'market':
+          setView('market');
+          break;
+        case 'buy':
+          setView('buy');
+          break;
+        case 'profile':
+          setView('profile');
+          break;
+      }
+    };
+    hydrate();
+    window.addEventListener('popstate', hydrate);
+    return () => window.removeEventListener('popstate', hydrate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!window.location.pathname.startsWith('/hub')) return;
+    let desired = '/hub';
+    if (view === 'market') desired = '/hub/market';
+    else if (view === 'buy') desired = '/hub/buy';
+    else if (view === 'profile') desired = '/hub/profile';
+    else if (view === 'chat') desired = tab === 'private' ? '/hub/private' : '/hub/global';
+    if (window.location.pathname !== desired) {
+      window.history.pushState({ hub: desired }, '', desired);
+    }
+  }, [view, tab]);
   // FIX 6 — market state
   const [listings, setListings] = useState<Array<{ name: string; price: string; seller: string }>>([]);
   const [listName, setListName] = useState("");

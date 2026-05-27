@@ -5310,6 +5310,78 @@ export default function App() {
     setActivePage(p);
   };
 
+  // ── URL ↔ activePage sync ─────────────────────────────────────────
+  // Each top-level page has a clean URL (/swap, /pool, /hub, ...). The
+  // Hub also owns its own sub-routes (/hub/private, /hub/global, etc.)
+  // — those are handled inside ChatUIPage. We only manage the prefix
+  // here and let ChatUIPage own everything after /hub/.
+  const PAGE_TO_PATH: Record<PageID, string> = {
+    swap: '/swap',
+    pool: '/pool',
+    deploy: '/deploy',
+    points: '/points',
+    checkin: '/check-in',
+    nfts: '/nfts',
+    messenger: '/messenger',
+    quests: '/socials',
+    games: '/games',
+    faucet: '/faucet',
+    hub: '/hub',
+    chatui: '/hub',
+  };
+  const pathToPage = (path: string): PageID => {
+    const seg = path.split('/').filter(Boolean)[0] || '';
+    switch (seg) {
+      case 'swap': return 'swap';
+      case 'pool': return 'pool';
+      case 'deploy': return 'deploy';
+      case 'points': return 'points';
+      case 'check-in':
+      case 'checkin': return 'checkin';
+      case 'nfts': return 'nfts';
+      case 'messenger': return 'messenger';
+      case 'socials':
+      case 'quests': return 'quests';
+      case 'games': return 'games';
+      case 'faucet': return 'faucet';
+      case 'hub':
+      case 'chatui': return 'chatui';
+      default: return 'swap';
+    }
+  };
+
+  // On first mount, hydrate activePage from the URL.
+  useEffect(() => {
+    const initial = pathToPage(window.location.pathname);
+    if (initial !== 'swap' || window.location.pathname !== '/') {
+      setActivePage(initial);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the URL in sync with the active page. The Hub owns deeper
+  // sub-paths so we only push when the prefix actually changes.
+  useEffect(() => {
+    if (activePage === 'checkin') return; // overlay, not a route
+    const desired = PAGE_TO_PATH[activePage];
+    const current = window.location.pathname;
+    const currentPrefix = '/' + (current.split('/').filter(Boolean)[0] || '');
+    if (currentPrefix === desired) return;
+    window.history.pushState({ page: activePage }, '', desired);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePage]);
+
+  // Browser back/forward — re-sync activePage from the URL.
+  useEffect(() => {
+    const onPop = () => {
+      const next = pathToPage(window.location.pathname);
+      if (next !== activePage) setActivePage(next);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePage]);
+
   useEffect(() => {
     const onNav = (e: Event) => {
       const detail = (e as CustomEvent).detail as PageID;

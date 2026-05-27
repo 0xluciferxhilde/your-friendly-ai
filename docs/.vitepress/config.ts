@@ -7,17 +7,17 @@ export default defineConfig({
   lastUpdated: true,
 
   head: [
-    ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],
+    ['link', { rel: 'icon', type: 'image/png', href: 'https://raw.githubusercontent.com/notfoundsuser/kindred-spirit/main/public/coins/web_logo.png' }],
     ['meta', { name: 'theme-color', content: '#000000' }],
     ['meta', { property: 'og:title', content: 'LitDEX Docs' }],
     ['meta', { property: 'og:description', content: 'Official documentation for LitDEX.' }],
-    ['meta', { property: 'og:image', content: 'https://docs.litdex.test-hub.xyz/og.png' }],
+    ['meta', { property: 'og:image', content: 'https://raw.githubusercontent.com/notfoundsuser/kindred-spirit/main/public/coins/web_logo.png' }],
     ['meta', { property: 'og:url', content: 'https://docs.litdex.test-hub.xyz' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
   ],
 
   themeConfig: {
-    logo: '/logo.png',
+    logo: 'https://raw.githubusercontent.com/notfoundsuser/kindred-spirit/main/public/coins/web_logo.png',
     siteTitle: 'LitDEX Docs',
 
     nav: [

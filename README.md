@@ -6,7 +6,7 @@
 
 **The all-in-one Web3 Hub on the LiteForge chain.**
 
-Swap, deploy, chat, mint, play, and earn — all on-chain, all in one place.
+Swap, deploy, chat, mint, play, and earn : all on-chain, all in one place.
 
 [![Live App](https://img.shields.io/badge/App-litdex.test--hub.xyz-000000?style=for-the-badge&logoColor=white)](https://litdex.test-hub.xyz)
 [![Docs](https://img.shields.io/badge/Docs-docs.litdex.test--hub.xyz-blue?style=for-the-badge)](https://docs.litdex.test-hub.xyz)
@@ -22,7 +22,7 @@ Swap, deploy, chat, mint, play, and earn — all on-chain, all in one place.
 | Field | Value |
 | --- | --- |
 | **App Name** | LitDEX |
-| **Description** | All-in-one Web3 Hub on LiteForge — DEX, social, NFTs, points, games, and a `.lit` name market in a single dApp. |
+| **Description** | All-in-one Web3 Hub on LiteForge : DEX, social, NFTs, points, games, and a `.lit` name market in a single dApp. |
 | **Live App** | https://litdex.test-hub.xyz |
 | **Docs** | https://docs.litdex.test-hub.xyz |
 | **Demo Video (X)** | _to be added at submission time_ |
@@ -32,26 +32,26 @@ Swap, deploy, chat, mint, play, and earn — all on-chain, all in one place.
 
 ## ✨ What is LitDEX?
 
-LitDEX is a fully on-chain ecosystem built on the LiteForge testnet. Most chains have one dApp per category — a separate DEX, a separate NFT marketplace, a separate messenger. LitDEX bundles them into a single experience, with a unified points economy that ties every action together:
+LitDEX is a fully on-chain ecosystem built on the LiteForge testnet. Most chains have one dApp per category : a separate DEX, a separate NFT marketplace, a separate messenger. LitDEX bundles them into a single experience, with a unified points economy that ties every action together:
 
 - 🔁 **Swap** tokens through the LitDEX router or partner OmniFun router (auto-routes the best price).
 - 💧 **Pools** with V2-style AMM, 0.3% fees, no lockups.
 - 🌉 **Cross-chain bridge** between LiteForge and Sepolia ETH.
 - 🚀 **Deploy** ERC-20 tokens, ERC-721 NFT collections, staking pools, and vesting contracts in one click each.
-- 💬 **Hub** — a complete on-chain social layer with Private DMs, a Global feed (with bounty tipping), a `.lit` Marketplace, and `.lit` domain registration.
-- 🏆 **Points System** — every meaningful action earns points (swap, deploy, message, check-in, register a name, complete socials).
-- 🎁 **Genesis NFTs** — three rarity tiers (LitShard, LitCore, LitGod) that pay daily yield in zkLTC, USDC, and LDEX.
-- 📨 **Messenger** — public broadcasts and direct messages, on-chain, with `.lit` reverse-resolution.
-- 🎮 **Games** — Math Slash 3D arcade game with a weekly leaderboard.
-- 💧 **Faucet** — 0.01 zkLTC + 10 points every 24h, NFT + `.lit` domain gated to keep bots out.
+- 💬 **Hub** : a complete on-chain social layer with Private DMs, a Global feed (with bounty tipping), a `.lit` Marketplace, and `.lit` domain registration.
+- 🏆 **Points System** : every meaningful action earns points (swap, deploy, message, check-in, register a name, complete socials).
+- 🎁 **Genesis NFTs** : three rarity tiers (LitShard, LitCore, LitGod) that pay daily yield in zkLTC, USDC, and LDEX.
+- 📨 **Messenger** : public broadcasts and direct messages, on-chain, with `.lit` reverse-resolution.
+- 🎮 **Games** : Math Slash 3D arcade game with a weekly leaderboard.
+- 💧 **Faucet** : 0.01 zkLTC + 10 points every 24h, NFT + `.lit` domain gated to keep bots out.
 
-Everything lives on LiteForge. There is no centralized database for friends, listings, or messages — the dApp reads directly from on-chain contracts.
+Everything lives on LiteForge. There is no centralized database for friends, listings, or messages : the dApp reads directly from on-chain contracts.
 
 ---
 
 ## 🎯 Why this matters
 
-Most testnets feel disjointed — apps don't share state, and users hop between five tabs to do anything interesting. LitDEX proves that a chain can host a fully integrated consumer experience:
+Most testnets feel disjointed : apps don't share state, and users hop between five tabs to do anything interesting. LitDEX proves that a chain can host a fully integrated consumer experience:
 
 - A single `.lit` name is your identity across the DEX, the marketplace, the messenger, and your profile.
 - A single point balance unlocks NFTs, leaderboard prizes, and (soon) the bridge.
@@ -71,17 +71,17 @@ The result is something that looks and feels like a Web2 platform, but every byt
 - Lucide icons
 
 **Backend (3 Node services)**
-- `litdex-hub` — Hub indexer + chain reads (posts, listings, friends, messages)
-- `litdex-quest-api` — Points credit, faucet, quest verification
-- `litdex-game` — Game sessions, score validation, anti-bot
-- `litdex-bridge` — Cross-chain relayer (LiteForge ↔ Sepolia)
+- `litdex-hub` : Hub indexer + chain reads (posts, listings, friends, messages)
+- `litdex-quest-api` : Points credit, faucet, quest verification
+- `litdex-game` : Game sessions, score validation, anti-bot
+- `litdex-bridge` : Cross-chain relayer (LiteForge ↔ Sepolia)
 
 **Smart Contracts** (on LiteForge `4441`)
-- `PointsSystem` — `0x526B0629C81d3314929dB8166372F792F3da3419`
-- `LitDeXNFT` — `0x59df2d661eb6F5fb97a694E1D2e4D17e2A7b7D15`
-- `DailyCheckin` — `0xDdE6F0ee964A9fdF71CDB2cBDF1e5E44263d3825`
-- `Messenger` — `0x9624FBBD6931b9D75961994E13604c1DC2c56225`
-- `Marketplace` (v2 with rejectBid) — `0x191678312D1d95eF2A05DfCEEa5401b6c654385E`
+- `PointsSystem` : `0x526B0629C81d3314929dB8166372F792F3da3419`
+- `LitDeXNFT` : `0x59df2d661eb6F5fb97a694E1D2e4D17e2A7b7D15`
+- `DailyCheckin` : `0xDdE6F0ee964A9fdF71CDB2cBDF1e5E44263d3825`
+- `Messenger` : `0x9624FBBD6931b9D75961994E13604c1DC2c56225`
+- `Marketplace` (v2 with rejectBid) : `0x191678312D1d95eF2A05DfCEEa5401b6c654385E`
 - `LitDeXDeployer` (token + NFT factories), `Posts`, `Registry`, `LiteSwap V2 Router`
 
 **Documentation**
@@ -124,13 +124,13 @@ Cross-cutting concerns:
 
 - **Caching**: Hub server has a per-route TTL response cache (5–30s for dynamic data, 24h for name resolution) to keep the public RPC happy.
 - **Idempotency**: Every points credit uses a deterministic `questId` so reloads can't double-credit.
-- **Per-wallet scoping**: Every localStorage key is keyed by wallet address — switching accounts in MetaMask never leaks the previous wallet's data.
+- **Per-wallet scoping**: Every localStorage key is keyed by wallet address : switching accounts in MetaMask never leaks the previous wallet's data.
 
 ---
 
 ## 🚀 Major features (deep dive)
 
-### 1. Swap — best-of-two routing
+### 1. Swap : best-of-two routing
 
 The swap card auto-quotes both the LitDEX router and OmniFun and picks whichever pays out more. The chosen path is shown live in the footer.
 
@@ -140,7 +140,7 @@ quote OmniFun → out_B
 chosen = max(out_A, out_B)
 ```
 
-### 2. Hub — on-chain social
+### 2. Hub : on-chain social
 
 The Hub bundles five sub-experiences under one navigation:
 
@@ -163,7 +163,7 @@ Every action earns points; daily caps prevent farming. The dashboard shows real-
 | `.lit` register | 10–100 | one-shot |
 | Math Slash | up to +10 per game | 5 games/day |
 
-### 4. Genesis NFTs — daily yield
+### 4. Genesis NFTs : daily yield
 
 Three tiers, all minted by spending points. Each NFT pays daily zkLTC, USDC, and LDEX as long as held.
 
@@ -173,7 +173,7 @@ Three tiers, all minted by spending points. Each NFT pays daily zkLTC, USDC, and
 | LitCore | 5,000 pts | 0.0005 zkLTC + 50 USDC + 10 LDEX | 4,999 |
 | LitGod | 25,000 pts | 0.005 zkLTC + 500 USDC + 100 LDEX | 999 |
 
-### 5. Faucet v2 — bot-proof
+### 5. Faucet v2 : bot-proof
 
 Earlier farms drained the faucet. The new gate requires **both**:
 
@@ -186,7 +186,7 @@ Bots can't economically clear those bars; real users meet them organically by da
 
 LiteForge ↔ Sepolia ETH, run by a polling relayer (`litdex-bridge`). Lock-mint pattern with checkpoint-style finality.
 
-### 7. Math Slash — skill-based earning
+### 7. Math Slash : skill-based earning
 
 A 3D arcade game where players slash equations. Score-based points credit on chain via a manual claim flow that batches all unclaimed sessions into one `recordQuestFor` call. Anti-bot filters (score velocity, min duration, blacklist) keep the leaderboard fair.
 
@@ -194,7 +194,7 @@ A 3D arcade game where players slash equations. Score-based points credit on cha
 
 ## 🌐 Routing
 
-Every section has its own URL — bookmarkable, shareable, refreshable.
+Every section has its own URL : bookmarkable, shareable, refreshable.
 
 ```
 /                  Home / Swap
@@ -307,9 +307,9 @@ Sections covered:
 
 - All user assets (tokens, LP positions, NFTs, `.lit` names) live in user wallets. The dApp custodies nothing.
 - `.lit` names are owned by users, not by LitDEX. Operator approval is per-wallet, persistent on-chain, and only granted when the user explicitly lists.
-- Backend services are read-only relays except for the points relayer (which calls `recordQuestFor` after on-chain verification — idempotent via questId).
+- Backend services are read-only relays except for the points relayer (which calls `recordQuestFor` after on-chain verification : idempotent via questId).
 - Faucet eligibility checks happen server-side before signing, so on-chain drips can't be triggered without the prerequisites.
-- Anti-bot for games is server-side (score velocity, duration floor) — client tampering doesn't credit points.
+- Anti-bot for games is server-side (score velocity, duration floor) : client tampering doesn't credit points.
 
 ---
 
@@ -345,7 +345,7 @@ Sections covered:
 
 ## 📄 License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT : see [LICENSE](LICENSE) for details.
 
 ---
 

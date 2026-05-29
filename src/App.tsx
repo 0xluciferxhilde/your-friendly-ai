@@ -4975,9 +4975,9 @@ const ZkMinerPage = ({ onBack }: { onBack: () => void }) => {
   const [starting, setStarting] = useState(false);
   const [gameOver, setGameOver] = useState<{
     reason: string;
-    charges: number;
+    scorePts: number;
     awarded: number;
-    best: number;
+    bestPts: number;
   } | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
   const [errMsg, setErrMsg] = useState('');
@@ -5014,18 +5014,19 @@ const ZkMinerPage = ({ onBack }: { onBack: () => void }) => {
       }
       if (d.type === 'litdex:zkminer:end') {
         const awarded = Number(d.awarded) || 0;
+        const scorePts = Number(d.scorePts) || 0;
         setGameOver({
-          reason:  String(d.reason || 'end'),
-          charges: Number(d.charges) || 0,
+          reason:   String(d.reason || 'end'),
+          scorePts,
           awarded,
-          best:    Number(d.best) || 0,
+          bestPts:  Number(d.bestPts) || 0,
         });
         try {
           if (awarded > 0) {
             addNotif(lowerAddr, {
               type: 'game',
-              title: 'ZK Miner · Rig Banked',
-              message: `${d.charges} charges · +${awarded} PTS`,
+              title: 'ZK Miner · Run Banked',
+              message: `Score ${scorePts.toFixed(1)} · +${awarded} PTS`,
             });
           }
         } catch {}
@@ -5068,8 +5069,8 @@ const ZkMinerPage = ({ onBack }: { onBack: () => void }) => {
 
   const balance     = Math.max(0, Number(stats?.pointsBalance ?? 0));
   const gamesLeft   = Math.max(0, Number(stats?.gamesLeft ?? Math.max(0, DAILY_LIMIT - Number(stats?.gamesPlayed ?? 0))));
-  const bestCharges = Number(stats?.bestCharges ?? 0);
-  const maxCharges  = Number(stats?.maxCharges ?? 10);
+  const bestScore   = Number(stats?.bestScorePts ?? 0);
+  const maxScore    = Number(stats?.maxScorePts ?? 50);
   const movesGame   = Number(stats?.movesPerGame ?? 30);
 
   const startGame = async () => {
@@ -5109,12 +5110,12 @@ const ZkMinerPage = ({ onBack }: { onBack: () => void }) => {
                     <div className="text-brand-text-primary text-sm font-bold">{balance.toLocaleString()} PTS</div>
                   </div>
                   <div className="mb-3">
-                    <div className="text-[10px] uppercase text-brand-text-muted">Reward</div>
-                    <div className="text-brand-text-primary text-sm">+1 PT / charge</div>
+                    <div className="text-[10px] uppercase text-brand-text-muted">Per Match</div>
+                    <div className="text-brand-text-primary text-sm">3=+0.3 · 4=+0.4 · 5=+0.5</div>
                   </div>
                   <div className="mb-3">
                     <div className="text-[10px] uppercase text-brand-text-muted">Cap / Game</div>
-                    <div className="text-brand-text-primary text-sm">{maxCharges} charges</div>
+                    <div className="text-brand-text-primary text-sm">{maxScore.toFixed(0)} PTS</div>
                   </div>
                   <div className="mb-3">
                     <div className="text-[10px] uppercase text-brand-text-muted">Moves</div>
@@ -5127,8 +5128,8 @@ const ZkMinerPage = ({ onBack }: { onBack: () => void }) => {
                   <div className="pt-3 border-t border-brand-border">
                     <div className="text-[10px] uppercase text-brand-text-muted mb-2">Personal Best</div>
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-brand-text-muted">Best Charges</span>
-                      <span className="text-brand-text-primary">{bestCharges}</span>
+                      <span className="text-brand-text-muted">Best Score</span>
+                      <span className="text-brand-text-primary">{bestScore.toFixed(1)} PTS</span>
                     </div>
                   </div>
                 </>
@@ -5141,8 +5142,8 @@ const ZkMinerPage = ({ onBack }: { onBack: () => void }) => {
           {!playing ? (
             <div className="p-6 sm:p-8 text-center">
               <div className="font-mono text-brand-text-primary text-base sm:text-lg mb-2">ZK MINER</div>
-              <div className="font-mono text-brand-text-muted text-xs mb-2">Match 3+ token gems to charge the rig. Each full charge mints +1 PT.</div>
-              <div className="font-mono text-[10px] text-brand-text-muted mb-6">Free · {DAILY_LIMIT} games/day · {movesGame} moves · cap {maxCharges} charges · resets 00:00 IST</div>
+              <div className="font-mono text-brand-text-muted text-xs mb-2">Match 3+ token gems to score points. 3-match = +0.3 PT, 4-match = +0.4, cascades stack.</div>
+              <div className="font-mono text-[10px] text-brand-text-muted mb-6">Free · {DAILY_LIMIT} games/day · {movesGame} moves · cap {maxScore.toFixed(0)} PTS · resets 00:00 IST</div>
               <button
                 type="button"
                 onClick={startGame}
@@ -5192,25 +5193,25 @@ const ZkMinerPage = ({ onBack }: { onBack: () => void }) => {
                     borderRadius: 16, padding: 24, textAlign: 'center', color: '#fff',
                   }}>
                     <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4 }}>
-                      {gameOver.reason === 'cap' ? 'RIG MAXED' : 'OUT OF MOVES'}
+                      {gameOver.reason === 'cap' ? 'MAX SCORE' : 'OUT OF MOVES'}
                     </div>
                     <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#666', letterSpacing: '0.2em', marginBottom: 18 }}>
                       Session ended
                     </div>
 
-                    <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#777', letterSpacing: '0.15em' }}>Banked</div>
-                    <div style={{ fontSize: 40, fontWeight: 700, lineHeight: 1, marginTop: 4, color: '#5be0a4' }}>+{gameOver.awarded}</div>
+                    <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#777', letterSpacing: '0.15em' }}>Score</div>
+                    <div style={{ fontSize: 40, fontWeight: 700, lineHeight: 1, marginTop: 4, color: '#5be0a4' }}>{gameOver.scorePts.toFixed(1)}</div>
                     <div style={{ fontSize: 11, color: '#777', marginTop: 4, marginBottom: 18, letterSpacing: '0.1em' }}>POINTS</div>
 
                     <div style={{ display: 'grid', gap: 10, marginBottom: 18, textAlign: 'left' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                        <span style={{ color: '#777', textTransform: 'uppercase' }}>Charges</span><span>{gameOver.charges}</span>
+                        <span style={{ color: '#777', textTransform: 'uppercase' }}>Credited On Chain</span><span>+{gameOver.awarded} PTS</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                        <span style={{ color: '#777', textTransform: 'uppercase' }}>Best</span><span>{gameOver.best}</span>
+                        <span style={{ color: '#777', textTransform: 'uppercase' }}>Best</span><span>{gameOver.bestPts.toFixed(1)} PTS</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                        <span style={{ color: '#777', textTransform: 'uppercase' }}>Cap</span><span>{maxCharges}</span>
+                        <span style={{ color: '#777', textTransform: 'uppercase' }}>Cap</span><span>{maxScore.toFixed(0)} PTS</span>
                       </div>
                     </div>
 

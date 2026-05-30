@@ -3665,6 +3665,29 @@ const WeeklyLeaderboard = ({ className = '' }: { className?: string }) => {
   );
 };
 
+const REWARD_TIERS = [
+  { range: 'Rank 1',     ldex: '1 zkLTC + 10K LDEX', pts: '2,500 PTS' },
+  { range: 'Rank 2',     ldex: '10K LDEX',          pts: '1,000 PTS' },
+  { range: 'Rank 3',     ldex: '5K LDEX',           pts: '500 PTS' },
+  { range: 'Rank 4-10',  ldex: '3K LDEX',           pts: '300 PTS' },
+  { range: 'Rank 11-20', ldex: '1K LDEX',           pts: '100 PTS' },
+];
+
+const RewardTierFooter = () => (
+  <div className="mt-4 pt-3 border-t border-brand-border text-[10px] text-brand-text-muted space-y-0.5">
+    <div className="text-brand-text-primary font-bold mb-1.5">Weekly Rewards · Top 20</div>
+    {REWARD_TIERS.map((t) => (
+      <div key={t.range} className="flex items-center justify-between gap-2">
+        <span>{t.range}</span>
+        <span className="text-right text-brand-text-muted">
+          <span className="text-brand-text-primary">{t.ldex}</span> · {t.pts}
+        </span>
+      </div>
+    ))}
+    <div className="pt-2 opacity-70">Top 20 rewarded every Sunday midnight IST</div>
+  </div>
+);
+
 const ConvertPointsCard = ({ wallet }: { wallet: string }) => {
   const SIMPLE_API = 'https://game.test-hub.xyz';
   const [pending, setPending] = useState<{ gamesPending: number; totalScore: number; pointsAvailable: number } | null>(null);
@@ -4148,6 +4171,7 @@ const MathSlashPage = ({ onBack }: { onBack: () => void }) => {
           </tbody>
         </table>
       )}
+      <RewardTierFooter />
     </div>
   );
 
@@ -6548,6 +6572,7 @@ const GameLeaderboard = ({ title, endpoint, scoreField, scoreLabel, scoreFormat,
           </tbody>
         </table>
       )}
+      <RewardTierFooter />
     </div>
   );
 };

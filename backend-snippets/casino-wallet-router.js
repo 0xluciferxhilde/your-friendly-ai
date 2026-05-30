@@ -76,12 +76,17 @@ module.exports = function createRouter({ db, txq }) {
       const { wallet, amount } = req.body || {};
       const w = String(wallet || '').toLowerCase();
       if (!w.match(/^0x[a-f0-9]{40}$/)) return res.status(400).json({ error: 'bad_wallet' });
+      console.log(`[/casino/deposit] wallet=${w} amount=${amount}`);
       const result = await cw.deposit(w, amount);
-      if (!result.ok) return res.status(400).json(result);
+      if (!result.ok) {
+        console.log(`[/casino/deposit] failed: ${result.error}`);
+        return res.status(400).json(result);
+      }
+      console.log(`[/casino/deposit] ok tx=${result.txHash} balance=${result.balance}`);
       res.json(result);
     } catch (e) {
-      console.error('[/casino/deposit]', e.message);
-      res.status(500).json({ error: 'deposit_failed' });
+      console.error('[/casino/deposit]', e.message, e.stack);
+      res.status(500).json({ error: 'deposit_failed', detail: e.message });
     }
   });
 
@@ -90,12 +95,17 @@ module.exports = function createRouter({ db, txq }) {
       const { wallet, amount } = req.body || {};
       const w = String(wallet || '').toLowerCase();
       if (!w.match(/^0x[a-f0-9]{40}$/)) return res.status(400).json({ error: 'bad_wallet' });
+      console.log(`[/casino/withdraw] wallet=${w} amount=${amount}`);
       const result = await cw.withdraw(w, amount);
-      if (!result.ok) return res.status(400).json(result);
+      if (!result.ok) {
+        console.log(`[/casino/withdraw] failed: ${result.error}`);
+        return res.status(400).json(result);
+      }
+      console.log(`[/casino/withdraw] ok tx=${result.txHash} balance=${result.balance}`);
       res.json(result);
     } catch (e) {
-      console.error('[/casino/withdraw]', e.message);
-      res.status(500).json({ error: 'withdraw_failed' });
+      console.error('[/casino/withdraw]', e.message, e.stack);
+      res.status(500).json({ error: 'withdraw_failed', detail: e.message });
     }
   });
 

@@ -284,7 +284,10 @@ function classifyAndPull(db, dbPath) {
   const T = new Set(tablesIn(db));
   const isGames = ['pumpdump_sessions', 'littower_sessions', 'zkminer_sessions', 'litlaunch_sessions', 'blockchain_sessions', 'litdice_rounds', 'game_rewards']
     .some((t) => T.has(t));
-  const isHub = ['messages', 'messenger_messages', 'bridge_log', 'bridges', 'nft_mints', 'lit_domains', 'token_deploys']
+  // Hub side: actual schema uses encrypted_messages, lit_names, posts.
+  const isHub = ['encrypted_messages', 'lit_names', 'posts', 'messages', 'messenger_messages',
+                 'bridge_log', 'bridges', 'nft_mints', 'token_deploys',
+                 'faucet_claims', 'conversions', 'listings_cache']
     .some((t) => T.has(t));
   console.error(`[stats] inspecting ${dbPath} (games=${isGames} hub=${isHub} tables=${T.size})`);
   STATS.rawTables[dbPath] = [...T];

@@ -63,9 +63,9 @@ router.get('/leaderboard', (req, res) => {
 router.get('/leaderboard', (req, res) => {
   try {
     const rows = db.prepare(\`
-      SELECT wallet, MAX(roll_x100) AS best_roll_x100
+      SELECT wallet, MAX(rolled_x100) AS best_roll_x100
       FROM litlimbo_rounds
-      WHERE settled = 1
+      WHERE settled = 1 AND won = 1
       GROUP BY wallet
       ORDER BY best_roll_x100 DESC
       LIMIT 25
@@ -92,7 +92,7 @@ router.get('/leaderboard', (req, res) => {
     const rows = db.prepare(\`
       SELECT wallet, MAX(multiplier_x100) AS best_mult_x100
       FROM litmines_rounds
-      WHERE settled = 1 AND won = 1
+      WHERE settled = 1 AND outcome = 'cashout'
       GROUP BY wallet
       ORDER BY best_mult_x100 DESC
       LIMIT 25
@@ -219,23 +219,32 @@ for (const p of PATCHES) {
     continue;
   }
   const src = fs.readFileSync(fp, 'utf8');
-  if (src.includes(p.marker)) {
-    console.log(`[ok]   ${p.file} — leaderboard already present`);
-    skipped++;
-    continue;
+  // If a leaderboard route already exists, strip it out so we can
+  // re-install the latest version. This keeps the installer
+  // idempotent AND lets us push schema fixes (e.g. column renames).
+  let working = src;
+  const existingRe = /\nrouter\.get\('\/leaderboard'[\s\S]*?\}\);\s*\n/;
+  if (existingRe.test(working)) {
+    console.log(`[update] ${p.file} — replacing existing leaderboard endpoint`);
+    working = working.replace(existingRe, '\n');
   }
   // Insert before the final module.exports = router; line.
-  const out = src.replace(
+  const out = working.replace(
     /module\.exports\s*=\s*router\s*;?\s*$/,
     `${p.code}\nmodule.exports = router;\n`,
   );
-  if (out === src) {
+  if (out === working) {
     console.log(`[fail] ${p.file} — could not find module.exports anchor`);
     missing++;
     continue;
   }
+  if (out === src) {
+    console.log(`[ok]   ${p.file} — already up to date`);
+    skipped++;
+    continue;
+  }
   fs.writeFileSync(fp, out, 'utf8');
-  console.log(`[done] ${p.file} — leaderboard endpoint added`);
+  console.log(`[done] ${p.file} — leaderboard endpoint installed`);
   touched++;
 }
 

@@ -99,20 +99,21 @@ async function _broadcastOnce(method, args) {
 async function _send(method, args) {
   // Try active provider, fall back to next on transient failures.
   let lastErr = null;
-  for (let attempt = 0; attempt < _providers.length * 2; attempt++) {
+  for (let attempt = 0; attempt < _providers.length * 2 + 2; attempt++) {
     try {
       const hash = await _broadcastOnce(method, args);
       return hash;
     } catch (e) {
       const msg = (e && (e.shortMessage || e.message || '')).toLowerCase();
       lastErr = e;
-      // Nonce-related → refresh and retry on same provider once.
-      if (msg.includes('nonce') || msg.includes('already known') || msg.includes('replacement')) {
+      console.error(`[casino-tx] ${method} attempt ${attempt} failed: ${msg.slice(0, 200)}`);
+      // Nonce-related → refresh and retry on same provider.
+      if (msg.includes('nonce too low') || msg.includes('nonce has already been used') || msg.includes('replacement') || msg.includes('already known')) {
         try { await _refreshNonce(); } catch { /* ignore */ }
         continue;
       }
       // Network/RPC failure → rotate provider.
-      if (msg.includes('timeout') || msg.includes('network') || msg.includes('502') || msg.includes('503') || msg.includes('econnreset')) {
+      if (msg.includes('timeout') || msg.includes('network') || msg.includes('502') || msg.includes('503') || msg.includes('econnreset') || msg.includes('connection') || msg.includes('econnrefused')) {
         try { await _rotateProvider(); } catch { /* ignore */ }
         continue;
       }

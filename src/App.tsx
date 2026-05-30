@@ -585,7 +585,6 @@ const PointsPage = ({ setPage }: { setPage: (p: PageID) => void }) => {
               </div>
            </Card>
         </div>
-      {!playing && (<div className="order-3"><GameLeaderboard title="Pump or Dump · Top Pots" endpoint={`${SIMPLE_API}/pumpdump/leaderboard`} scoreField="best_pot" scoreLabel="Best Pot" /></div>)}
       </div>
     </motion.div>
   );
@@ -4676,7 +4675,7 @@ const PumpDumpPage = ({ onBack }: { onBack: () => void }) => {
             </div>
           )}
         </div>
-      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Tower · Top Heights" endpoint={`${SIMPLE_API}/littower/leaderboard`} scoreField="best_height" scoreLabel="Best Height" /></div>)}
+      {!playing && (<div className="order-3"><GameLeaderboard title="Pump or Dump · Top Pots" endpoint={`${SIMPLE_API}/pumpdump/leaderboard`} scoreField="best_pot" scoreLabel="Best Pot" /></div>)}
       </div>
     </motion.div>
   );
@@ -4962,7 +4961,7 @@ const LitTowerPage = ({ onBack }: { onBack: () => void }) => {
             </div>
           )}
         </div>
-      {!playing && (<div className="order-3"><GameLeaderboard title="ZK Miner · Top Scores" endpoint={`${SIMPLE_API}/zkminer/leaderboard`} scoreField="best_score" scoreLabel="Best Score" scoreFormat={(v) => `${Number(v||0).toFixed(1)} PTS`} /></div>)}
+      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Tower · Top Heights" endpoint={`${SIMPLE_API}/littower/leaderboard`} scoreField="best_height" scoreLabel="Best Height" /></div>)}
       </div>
     </motion.div>
   );
@@ -5248,7 +5247,7 @@ const ZkMinerPage = ({ onBack }: { onBack: () => void }) => {
             </div>
           )}
         </div>
-      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Launch · Top Coins" endpoint={`${SIMPLE_API}/litlaunch/leaderboard`} scoreField="best_score" scoreLabel="Coins" /></div>)}
+      {!playing && (<div className="order-3"><GameLeaderboard title="ZK Miner · Top Scores" endpoint={`${SIMPLE_API}/zkminer/leaderboard`} scoreField="best_score" scoreLabel="Best Score" scoreFormat={(v) => `${Number(v||0).toFixed(1)} PTS`} /></div>)}
       </div>
     </motion.div>
   );
@@ -5533,7 +5532,7 @@ const LitLaunchPage = ({ onBack }: { onBack: () => void }) => {
             </div>
           )}
         </div>
-      {!playing && (<div className="order-3"><GameLeaderboard title="Block Chain · Top Tiles" endpoint={`${SIMPLE_API}/blockchain/leaderboard`} scoreField="best_tile" scoreLabel="Best Tile" /></div>)}
+      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Launch · Top Coins" endpoint={`${SIMPLE_API}/litlaunch/leaderboard`} scoreField="best_score" scoreLabel="Coins" /></div>)}
       </div>
     </motion.div>
   );
@@ -5820,7 +5819,7 @@ const BlockChainPage = ({ onBack }: { onBack: () => void }) => {
             </div>
           )}
         </div>
-      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Dice · Top Multipliers" endpoint={`${SIMPLE_API}/litdice/leaderboard`} scoreField="best_multiplier" scoreLabel="Best ×" scoreFormat={(v) => `${Number(v||0).toFixed(2)}x`} /></div>)}
+      {!playing && (<div className="order-3"><GameLeaderboard title="Block Chain · Top Tiles" endpoint={`${SIMPLE_API}/blockchain/leaderboard`} scoreField="best_tile" scoreLabel="Best Tile" /></div>)}
       </div>
     </motion.div>
   );
@@ -5869,6 +5868,7 @@ const LitDicePage = ({ onBack }: { onBack: () => void }) => {
             link: d?.txInfo?.explorerUrl,
           });
         } catch {}
+        saveFairness({ game: 'dice', seedHash: d.seedHash, serverSeed: d.serverSeed, roundId: d.roundId });
         fetchStats();
       }
     };
@@ -5947,7 +5947,7 @@ const LitDicePage = ({ onBack }: { onBack: () => void }) => {
             </div>
           )}
         </div>
-      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Limbo · Top Crashes" endpoint={`${SIMPLE_API}/litlimbo/leaderboard`} scoreField="best_roll" scoreLabel="Best ×" scoreFormat={(v) => `${Number(v||0).toFixed(2)}x`} /></div>)}
+      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Dice · Top Multipliers" endpoint={`${SIMPLE_API}/litdice/leaderboard`} scoreField="best_multiplier" scoreLabel="Best ×" scoreFormat={(v) => `${Number(v||0).toFixed(2)}x`} /></div>)}
       </div>
     </motion.div>
   );
@@ -5996,6 +5996,7 @@ const LitLimboPage = ({ onBack }: { onBack: () => void }) => {
             link: d?.txInfo?.explorerUrl,
           });
         } catch {}
+        saveFairness({ game: 'limbo', seedHash: d.seedHash, serverSeed: d.serverSeed, roundId: d.roundId });
         fetchStats();
       }
     };
@@ -6075,7 +6076,7 @@ const LitLimboPage = ({ onBack }: { onBack: () => void }) => {
             </div>
           )}
         </div>
-      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Mines · Top Multipliers" endpoint={`${SIMPLE_API}/litmines/leaderboard`} scoreField="best_multiplier" scoreLabel="Best ×" scoreFormat={(v) => `${Number(v||0).toFixed(2)}x`} /></div>)}
+      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Limbo · Top Crashes" endpoint={`${SIMPLE_API}/litlimbo/leaderboard`} scoreField="best_roll" scoreLabel="Best ×" scoreFormat={(v) => `${Number(v||0).toFixed(2)}x`} /></div>)}
       </div>
     </motion.div>
   );
@@ -6124,6 +6125,7 @@ const LitMinesPage = ({ onBack }: { onBack: () => void }) => {
             link: d?.txInfo?.explorerUrl,
           });
         } catch {}
+        saveFairness({ game: 'mines', seedHash: d.seedHash, serverSeed: d.serverSeed, roundId: d.roundId, bombs: d.bombs });
         fetchStats();
       }
     };
@@ -6203,7 +6205,7 @@ const LitMinesPage = ({ onBack }: { onBack: () => void }) => {
             </div>
           )}
         </div>
-      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Plinko · Top Multipliers" endpoint={`${SIMPLE_API}/litplinko/leaderboard`} scoreField="best_multiplier" scoreLabel="Best ×" scoreFormat={(v) => `${Number(v||0).toFixed(2)}x`} /></div>)}
+      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Mines · Top Multipliers" endpoint={`${SIMPLE_API}/litmines/leaderboard`} scoreField="best_multiplier" scoreLabel="Best ×" scoreFormat={(v) => `${Number(v||0).toFixed(2)}x`} /></div>)}
       </div>
     </motion.div>
   );
@@ -6233,6 +6235,7 @@ const LitPlinkoPage = ({ onBack }: { onBack: () => void }) => {
       if (d.type === 'litdex:litplinko:exit') { setPlaying(false); try { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); } catch {} try { (screen.orientation as any)?.unlock?.(); } catch {} fetchStats(); return; }
       if (d.type === 'litdex:litplinko:end') {
         try { addNotif(lowerAddr, { type: 'game', title: d.won ? 'Lit Plinko · Win' : 'Lit Plinko · Loss', message: `${Number(d.multiplier || 0).toFixed(2)}x · ${d.profit >= 0 ? '+' : ''}${d.profit} PTS`, link: d?.txInfo?.explorerUrl }); } catch {}
+        saveFairness({ game: 'plinko', seedHash: d.seedHash, serverSeed: d.serverSeed, clientSeed: d.clientSeed, risk: d.risk });
         fetchStats();
       }
     };
@@ -6297,7 +6300,7 @@ const LitPlinkoPage = ({ onBack }: { onBack: () => void }) => {
             </div>
           )}
         </div>
-      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Wheel · Top Multipliers" endpoint={`${SIMPLE_API}/litwheel/leaderboard`} scoreField="best_multiplier" scoreLabel="Best ×" scoreFormat={(v) => `${Number(v||0).toFixed(2)}x`} /></div>)}
+      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Plinko · Top Multipliers" endpoint={`${SIMPLE_API}/litplinko/leaderboard`} scoreField="best_multiplier" scoreLabel="Best ×" scoreFormat={(v) => `${Number(v||0).toFixed(2)}x`} /></div>)}
       </div>
     </motion.div>
   );
@@ -6324,6 +6327,7 @@ const LitWheelPage = ({ onBack }: { onBack: () => void }) => {
       if (d.type === 'litdex:litwheel:exit') { setPlaying(false); try { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); } catch {} try { (screen.orientation as any)?.unlock?.(); } catch {} fetchStats(); return; }
       if (d.type === 'litdex:litwheel:end') {
         try { addNotif(lowerAddr, { type: 'game', title: d.won ? 'Lit Wheel · Win' : 'Lit Wheel · Loss', message: `${Number(d.multiplier || 0).toFixed(2)}x · ${d.profit >= 0 ? '+' : ''}${d.profit} PTS`, link: d?.txInfo?.explorerUrl }); } catch {}
+        saveFairness({ game: 'wheel', seedHash: d.seedHash, serverSeed: d.serverSeed, clientSeed: d.clientSeed, risk: d.risk });
         fetchStats();
       }
     };
@@ -6388,7 +6392,7 @@ const LitWheelPage = ({ onBack }: { onBack: () => void }) => {
             </div>
           )}
         </div>
-      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Coin Flip · Top Streaks" endpoint={`${SIMPLE_API}/litcoinflip/leaderboard`} scoreField="best_streak" scoreLabel="Best Streak" scoreFormat={(v) => `×${Number(v||0)}`} /></div>)}
+      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Wheel · Top Multipliers" endpoint={`${SIMPLE_API}/litwheel/leaderboard`} scoreField="best_multiplier" scoreLabel="Best ×" scoreFormat={(v) => `${Number(v||0).toFixed(2)}x`} /></div>)}
       </div>
     </motion.div>
   );
@@ -6415,6 +6419,7 @@ const LitCoinFlipPage = ({ onBack }: { onBack: () => void }) => {
       if (d.type === 'litdex:litcoinflip:exit') { setPlaying(false); try { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); } catch {} try { (screen.orientation as any)?.unlock?.(); } catch {} fetchStats(); return; }
       if (d.type === 'litdex:litcoinflip:end') {
         try { addNotif(lowerAddr, { type: 'game', title: d.won ? `Lit Coin Flip · Streak ×${d.streak}` : 'Lit Coin Flip · Loss', message: `${Number(d.multiplier || 0).toFixed(2)}x · ${d.profit >= 0 ? '+' : ''}${d.profit} PTS`, link: d?.txInfo?.explorerUrl }); } catch {}
+        saveFairness({ game: 'coinflip', seedHash: d.seedHash, serverSeed: d.serverSeed, clientSeed: d.clientSeed, side: d.side, streak: d.streak });
         fetchStats();
       }
     };
@@ -6479,6 +6484,7 @@ const LitCoinFlipPage = ({ onBack }: { onBack: () => void }) => {
             </div>
           )}
         </div>
+      {!playing && (<div className="order-3"><GameLeaderboard title="Lit Coin Flip · Top Streaks" endpoint={`${SIMPLE_API}/litcoinflip/leaderboard`} scoreField="best_streak" scoreLabel="Best Streak" scoreFormat={(v) => `×${Number(v||0)}`} /></div>)}
       </div>
     </motion.div>
   );
@@ -6546,6 +6552,38 @@ const GameLeaderboard = ({ title, endpoint, scoreField, scoreLabel, scoreFormat,
   );
 };
 
+const FAIRNESS_KEY = 'litdex_last_fairness_v1';
+type FairnessGame = 'dice'|'limbo'|'mines'|'plinko'|'wheel'|'coinflip';
+type FairnessRecord = {
+  game: FairnessGame;
+  seedHash?: string;
+  serverSeed?: string;
+  roundId?: string;
+  clientSeed?: string;
+  risk?: 'low'|'medium'|'high';
+  side?: 'heads'|'tails';
+  streak?: number;
+  bombs?: number;
+  ts: number;
+};
+const saveFairness = (rec: Omit<FairnessRecord, 'ts'>) => {
+  try {
+    const raw = localStorage.getItem(FAIRNESS_KEY);
+    const map: Record<string, FairnessRecord> = raw ? JSON.parse(raw) : {};
+    map[rec.game] = { ...rec, ts: Date.now() };
+    map.__last = { ...rec, ts: Date.now() };
+    localStorage.setItem(FAIRNESS_KEY, JSON.stringify(map));
+  } catch { /* ignore quota / parse */ }
+};
+const loadFairness = (g?: FairnessGame): FairnessRecord | null => {
+  try {
+    const raw = localStorage.getItem(FAIRNESS_KEY);
+    if (!raw) return null;
+    const map: Record<string, FairnessRecord> = JSON.parse(raw);
+    return (g ? map[g] : map.__last) || null;
+  } catch { return null; }
+};
+
 const ProvablyFairModal = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
   const [game, setGame] = useState<'dice'|'limbo'|'mines'|'plinko'|'wheel'|'coinflip'>('dice');
   const [seedHash, setSeedHash] = useState('');
@@ -6558,6 +6596,64 @@ const ProvablyFairModal = ({ open, onClose }: { open: boolean; onClose: () => vo
   const [bombs, setBombs] = useState(3);
   const [result, setResult] = useState<{ won: boolean; details: string; subline?: string; flips?: string; mismatch?: boolean } | null>(null);
   const [scriptReady, setScriptReady] = useState<boolean>(typeof window !== 'undefined' && !!(window as any).LitDexVerify);
+
+  // Pre-fill on open with the most recent fairness record from any game.
+  useEffect(() => {
+    if (!open) return;
+    const last = loadFairness();
+    if (last) {
+      setGame(last.game);
+      setSeedHash(last.seedHash || '');
+      setServerSeed(last.serverSeed || '');
+      setRoundId(last.roundId || '');
+      setClientSeed(last.clientSeed || '');
+      if (last.risk) setRisk(last.risk);
+      if (last.side) setSide(last.side);
+      if (last.streak) setStreak(last.streak);
+      if (last.bombs) setBombs(last.bombs);
+    }
+    if ((window as any).LitDexVerify) setScriptReady(true);
+  }, [open]);
+
+  // When user switches game, pre-fill from that game's last record
+  // (without clearing if no record).
+  useEffect(() => {
+    if (!open) return;
+    const rec = loadFairness(game);
+    if (rec) {
+      setSeedHash(rec.seedHash || '');
+      setServerSeed(rec.serverSeed || '');
+      setRoundId(rec.roundId || '');
+      setClientSeed(rec.clientSeed || '');
+      if (rec.risk) setRisk(rec.risk);
+      if (rec.side) setSide(rec.side);
+      if (rec.streak) setStreak(rec.streak);
+      if (rec.bombs) setBombs(rec.bombs);
+      setResult(null);
+    } else {
+      // No record for this game — clear inputs that don't apply.
+      setResult(null);
+    }
+  }, [game, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    if ((window as any).LitDexVerify) { setScriptReady(true); return; }
+    // Try existing tag first
+    const existing = document.querySelector('script[data-litdex-verify="1"]') as HTMLScriptElement | null;
+    if (existing) {
+      const checkInterval = setInterval(() => {
+        if ((window as any).LitDexVerify) { setScriptReady(true); clearInterval(checkInterval); }
+      }, 100);
+      return () => clearInterval(checkInterval);
+    }
+    const s = document.createElement('script');
+    s.src = '/games/verify-inline.js';
+    s.dataset.litdexVerify = '1';
+    s.onload = () => setScriptReady(true);
+    s.onerror = () => setScriptReady(false);
+    document.head.appendChild(s);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -6579,7 +6675,6 @@ const ProvablyFairModal = ({ open, onClose }: { open: boolean; onClose: () => vo
   }, [open]);
 
   const reset = () => { setSeedHash(''); setServerSeed(''); setRoundId(''); setClientSeed(''); setResult(null); };
-  useEffect(() => { reset(); }, [game]);
 
   const run = () => {
     const v = (window as any).LitDexVerify;

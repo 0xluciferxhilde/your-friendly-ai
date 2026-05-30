@@ -370,7 +370,7 @@
       <button class="panel-btn verify" style="width:100%;margin-top:14px" id="btn-verify-end">VERIFY FAIRNESS</button>
     `;
     document.getElementById('btn-verify-end').onclick = (e) => { e.stopPropagation(); showFairness(); };
-    postParent({ type: 'litdex:litcoinflip:end', won: d.won, multiplier: d.multiplier, awarded: d.awarded, profit: d.profit, stake: d.stake, streak: d.streak, txInfo: d.txHash ? { txHash: d.txHash, explorerUrl: d.explorerUrl } : null });
+    postParent({ type: 'litdex:litcoinflip:end', won: d.won, multiplier: d.multiplier, awarded: d.awarded, profit: d.profit, stake: d.stake, streak: d.streak, txInfo: d.txHash ? { txHash: d.txHash, explorerUrl: d.explorerUrl } : null, seedHash: ST.seedHash || d.seedHash, serverSeed: d.serverSeed, roundId: ST.roundId, clientSeed: ST.clientSeed, side: ST.side });
     fetchStats().then((s) => {
       const left = s ? Math.max(0, Number(s.gamesLeft||0)) : 0;
       const bal = s ? Number(s.pointsBalance||0) : 0;

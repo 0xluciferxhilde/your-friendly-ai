@@ -42,6 +42,16 @@ const SERVER_DIR = process.cwd();
 const LDEX_ADDR   = process.env.LDEX_ADDR   || '0xBAaba603e6298fbb76325a6B0d47Cd57154ca641';
 const POINTS_ADDR = process.env.POINTS_ADDR || '0x526B0629C81d3314929dB8166372F792F3da3419';
 
+// Earliest date (IST) on which a real distribution may run. The first
+// reward week is Mon 1 Jun 2026 → Sun 7 Jun 2026, so the first payout
+// fires Sunday 7 Jun 2026 23:59 IST. Any --execute run before this date
+// is blocked (so a cron firing on Sun 31 May 2026 does NOT pay out the
+// current week). Override with REWARDS_FIRST_PAYOUT=YYYY-MM-DD.
+const FIRST_PAYOUT = process.env.REWARDS_FIRST_PAYOUT || '2026-06-07';
+function istDateStr() {
+  return new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 // Per-rank reward tiers.
 function tierFor(rank) {
   if (rank === 1)  return { zkltc: 1, ldex: 10000, pts: 2500 };
@@ -166,6 +176,15 @@ const recordPaid = (rec) =>
     console.log('\nDRY RUN — no transactions sent. Re-run with --execute to distribute.');
     plan.slice(0, 60).forEach((p) => console.log(`  ${p.game} #${p.rank} ${p.wallet} → ${p.zkltc} zkLTC, ${p.ldex} LDEX, ${p.pts} PTS`));
     if (plan.length > 60) console.log(`  …and ${plan.length - 60} more`);
+    process.exit(0);
+  }
+
+  // Hard guard: do not distribute before the first scheduled payout date.
+  // This protects against a cron that fires on an earlier Sunday.
+  const today = istDateStr();
+  if (today < FIRST_PAYOUT) {
+    console.log(`\n⏳ Today (${today} IST) is before the first payout date (${FIRST_PAYOUT}).`);
+    console.log('   No rewards distributed. The first payout runs on/after that date.');
     process.exit(0);
   }
 

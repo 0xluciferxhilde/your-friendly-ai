@@ -166,7 +166,7 @@ router.get('/leaderboard', (req, res) => {
   try {
     const rows = db.prepare(\`
       SELECT wallet, MAX(streak) AS best_streak
-      FROM litcoinflip_rounds
+      FROM litcoin_rounds
       WHERE settled = 1 AND won = 1
       GROUP BY wallet
       ORDER BY best_streak DESC

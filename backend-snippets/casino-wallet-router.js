@@ -14,11 +14,40 @@
 
 const express = require('express');
 
+const ALLOWED_ORIGINS = [
+  'https://litdex.test-hub.xyz',
+  'https://litdex-darkseidbulls-projects.vercel.app',
+  'https://litdex.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+];
+
+function corsMiddleware(req, res, next) {
+  const origin = req.headers.origin || '';
+  // Allow any vercel preview subdomain too.
+  const isVercelPreview = /^https:\/\/litdex(-[a-z0-9-]+)?\.vercel\.app$/.test(origin);
+  if (ALLOWED_ORIGINS.includes(origin) || isVercelPreview) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  } else {
+    // Permissive fallback for direct API consumers (curl, etc.).
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
+}
+
 module.exports = function createRouter({ db, txq }) {
   const cw = require('./casino-wallet');
   cw.init({ db, txq });
 
   const router = express.Router();
+  router.use(corsMiddleware);
 
   router.get('/balance/:wallet', (req, res) => {
     try {

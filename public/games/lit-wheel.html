@@ -203,8 +203,9 @@
   fairClose.onclick = () => fairness.classList.add('hidden');
   document.getElementById('open-verifier').onclick = () => {
     fairness.classList.add('hidden');
-    document.getElementById('vfy-hash').value = '';
-    document.getElementById('vfy-seed').value = '';
+    const r = ST.lastResult || {};
+    document.getElementById('vfy-hash').value = r.seedHash || ST.seedHash || '';
+    document.getElementById('vfy-seed').value = r.serverSeed || '';
     document.getElementById('vfy-result').style.display = 'none';
     document.getElementById('verify-modal').classList.remove('hidden');
   };

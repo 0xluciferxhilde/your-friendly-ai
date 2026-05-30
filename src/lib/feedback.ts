@@ -42,6 +42,47 @@ export function refreshPoints() {
   } catch { /* ignore */ }
 }
 
+/**
+ * Award activity points for swap / pool / deploy / nft mint. The backend
+ * (api.test-hub.xyz/activity/award) verifies the tx on chain, enforces
+ * the per-day caps and the exact point amounts, and is idempotent per
+ * txHash — so calling this is always safe and never inflates rewards.
+ *
+ * Fire-and-forget: failures are swallowed because the underlying action
+ * (the swap/deploy/etc.) has already succeeded. We refresh the points
+ * HUD shortly after so the new balance shows up.
+ *
+ *   awardActivity({ wallet, action: 'swap', txHash })
+ *   awardActivity({ wallet, action: 'pool', txHash })
+ *   awardActivity({ wallet, action: 'deploy', txHash, meta: { type: 'nft' } })
+ *   awardActivity({ wallet, action: 'nft_mint', txHash, meta: { tier: 'litgod' } })
+ */
+export async function awardActivity(opts: {
+  wallet?: string | null;
+  action: "swap" | "pool" | "deploy" | "nft_mint";
+  txHash?: string | null;
+  meta?: Record<string, unknown>;
+}) {
+  try {
+    const wallet = (opts.wallet || "").toLowerCase();
+    if (!wallet || !opts.txHash) return;
+    await fetch("https://api.test-hub.xyz/activity/award", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        wallet,
+        action: opts.action,
+        txHash: opts.txHash,
+        meta: opts.meta || {},
+      }),
+    });
+    // Give the relayer a moment, then refresh the on-chain points HUD.
+    setTimeout(() => {
+      try { window.dispatchEvent(new CustomEvent("litdex:points-refresh")); } catch { /* ignore */ }
+    }, 4000);
+  } catch { /* award is best-effort; the action already succeeded */ }
+}
+
 export function shortHex(addr: string, l = 4, r = 4): string {
   if (!addr) return "";
   return `${addr.slice(0, 2 + l)}...${addr.slice(-r)}`;

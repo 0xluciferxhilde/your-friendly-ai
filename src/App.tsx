@@ -52,7 +52,7 @@ import SwapCard from './components/ui/crypto-swap-card';
 import BridgeCard from './components/ui/bridge-card';
 import { AnimatedNavFramer } from './components/ui/navigation-menu';
 import { litvmChain, errMsg, LITDEX_DEPLOYER_ADDRESS, readTotalDeployed, deployTokenLitDeX, shortAddr, readDeployments, readDeployFee, readLegacyDeployFee, deployTokenLegacy, getLegacyTokenInfo, getLegacyTokensByCreator, getLegacyTotalDeployedDisplay, readPoints, readCheckinInfo, readCurrentDay, checkinToday, claimNFTRewardsByType, claimNFTRewards, readUserNFTs, readNFTPendingByType, readNFTCurrentDay, readNFTTotalMinted, readNFTAvailablePoints, syncUserPoints, mintRewardNFT, spendUserPoints } from './lib/litdex-core-logic';
-import { showSuccess, showError, showInfo, refreshPoints } from './lib/feedback';
+import { showSuccess, showError, showInfo, refreshPoints, awardActivity } from './lib/feedback';
 
 // --- Types ---
 type PageID = 'swap' | 'pool' | 'deploy' | 'points' | 'checkin' | 'nfts' | 'messenger' | 'quests' | 'games' | 'faucet' | 'hub' | 'chatui';
@@ -1051,7 +1051,7 @@ const NFTsPage = () => {
 
       // Step 3: Mint NFT directly
       console.log("Minting NFT type:", nftType);
-      await mintRewardNFT(nftType);
+      const mintTxHash = await mintRewardNFT(nftType);
 
       // Step 4: Deduct points from PointsSystemV6
       try {
@@ -1059,6 +1059,13 @@ const NFTsPage = () => {
       } catch (spendErr) {
         console.error("spendPoints failed:", spendErr);
       }
+
+      // Award mint points (server-enforced, idempotent per tx):
+      // litshard +200, litcore +500, litgod +1000.
+      try {
+        const tierKey = nftType === 1 ? 'litshard' : nftType === 2 ? 'litcore' : 'litgod';
+        awardActivity({ wallet: address, action: 'nft_mint', txHash: mintTxHash, meta: { tier: tierKey } });
+      } catch { /* best-effort */ }
 
       addNotif(address, { type: "nft", title: "+NFT minted!", message: `${tier.name} minted successfully` });
       showSuccess({
@@ -2031,6 +2038,7 @@ contract MNFT is ERC721, Ownable {
       setTxStatus("success");
       const ca = (result as any).tokenAddress as string | undefined;
       const explorerUrl = `${litvmChain.blockExplorers.default.url}/tx/${result.txHash}`;
+      awardActivity({ wallet: address, action: 'deploy', txHash: result.txHash, meta: { type: 'nft' } });
       const shortHash = `${result.txHash.slice(0, 6)}...${result.txHash.slice(-4)}`;
       try {
         if (address) addNotif(address, {
@@ -2380,6 +2388,7 @@ contract MNFT is ERC721, Ownable {
 };
 
 const StakingForm = ({ onDeployed }: any) => {
+  const { address } = useAccount();
   const [stakingToken, setStakingToken] = useState('');
   const [rewardToken, setRewardToken] = useState('');
   const [rewardRate, setRewardRate] = useState('12');
@@ -2510,6 +2519,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
         label || "Staking Pool"
       );
       setTxInfo({ hash: res.txHash, address: res.contractAddress });
+      awardActivity({ wallet: address, action: 'deploy', txHash: res.txHash, meta: { type: 'staking' } });
       {
         const explorerUrl = `${litvmChain.blockExplorers.default.url}/tx/${res.txHash}`;
         const shortHash = `${res.txHash.slice(0, 6)}...${res.txHash.slice(-4)}`;
@@ -2653,6 +2663,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
 };
 
 const VestingForm = ({ onDeployed }: any) => {
+  const { address } = useAccount();
   const [tokenAddress, setTokenAddress] = useState('');
   const [beneficiary, setBeneficiary] = useState('');
   const [amount, setAmount] = useState('');
@@ -2753,6 +2764,7 @@ contract ${label.replace(/\s+/g, '') || "TokenVesting"} is Ownable, ReentrancyGu
         label || "Token Vesting"
       );
       setTxInfo({ hash: res.txHash, address: res.contractAddress });
+      awardActivity({ wallet: address, action: 'deploy', txHash: res.txHash, meta: { type: 'vesting' } });
       {
         const explorerUrl = `${litvmChain.blockExplorers.default.url}/tx/${res.txHash}`;
         const shortHash = `${res.txHash.slice(0, 6)}...${res.txHash.slice(-4)}`;
@@ -3039,6 +3051,7 @@ contract LitVMTokenFactory is Ownable {
         pausable
       });
       setTxInfo({ hash: res.txHash, address: res.tokenAddress });
+      awardActivity({ wallet: address, action: 'deploy', txHash: res.txHash, meta: { type: 'tokenfactory' } });
       {
         const explorerUrl = `${litvmChain.blockExplorers.default.url}/tx/${res.txHash}`;
         const shortHash = `${res.txHash.slice(0, 6)}...${res.txHash.slice(-4)}`;

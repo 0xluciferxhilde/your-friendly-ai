@@ -29,7 +29,7 @@ import {
 import type { RouterKey } from "@/lib/litdex-core-logic"
 import { ChevronDown } from "lucide-react"
 import { addNotif } from "@/lib/notifications"
-import { showSuccess, showError, refreshPoints } from "@/lib/feedback"
+import { showSuccess, showError, refreshPoints, awardActivity } from "@/lib/feedback"
 
 type Coin = {
   address: string
@@ -348,6 +348,7 @@ export default function SwapCard({
           ],
         });
         refreshPoints();
+        awardActivity({ wallet: walletAddress, action: "swap", txHash: hash });
       } else {
         if (subMode === "add" || (subMode === "remove" && poolAction === "add")) {
           const rKey = "liteswap";
@@ -381,6 +382,7 @@ export default function SwapCard({
             ],
           });
           refreshPoints();
+          awardActivity({ wallet: walletAddress, action: "pool", txHash: hash });
           fetchPositions();
         } else {
           if (!selectedLp) {
@@ -415,6 +417,7 @@ export default function SwapCard({
             ],
           });
           refreshPoints();
+          awardActivity({ wallet: walletAddress, action: "pool", txHash: hash });
           fetchPositions();
           setSelectedLp(null);
         }

@@ -65,17 +65,15 @@ if (sundayRe.test(s)) {
 }
 
 // ── B) Neutralise the "Deploy/checkin/quest top-10 → zkLTC" sender ─────
-// This block lives inside the Saturday cron. We comment out just the
-// sender loop, keyed on the DEPLOY_REWARDS_ZKLTC array + its for-loop.
-const deployRe = /const DEPLOY_REWARDS_ZKLTC = \[[\s\S]*?\];\s*\n\s*const topDeploy = db\.prepare\([\s\S]*?\)\.all\(\);\s*\n\s*for \(let i = 0; i < topDeploy\.length; i\+\+\) \{[\s\S]*?\n\s*\}/;
-if (deployRe.test(s)) {
-  s = s.replace(deployRe, (m) =>
-`${MARK}
-  // Legacy deploy/checkin/quest top-10 zkLTC payout DISABLED.
-  /* ${m.replace(/\*\//g, '*\\/')} */`);
+// We do NOT comment-wrap the loop (nested braces break that). Instead we
+// remove ONLY the sendTransaction+wait statement, leaving the try/catch
+// and loop structure intact and brace-balanced.
+const deploySendRe = /const\s+tx\s*=\s*await\s+wallet\.sendTransaction\(\{\s*to:\s*w,\s*value:\s*ethers\.parseEther\(zkltcReward\)\s*\}\);\s*await\s+tx\.wait\(\);/;
+if (deploySendRe.test(s)) {
+  s = s.replace(deploySendRe, `${MARK} /* deploy-top-10 zkLTC payout removed — handled by weekly-rewards-payout.js */ const tx = { hash: null };`);
   console.log('[done] (B) Deploy/checkin/quest top-10 zkLTC sender disabled');
 } else {
-  console.log('[warn] (B) Deploy-top-10 anchor not found — skipped (may already differ)');
+  console.log('[warn] (B) Deploy-top-10 sender anchor not found — skipped (may already differ)');
 }
 
 if (s === before) {

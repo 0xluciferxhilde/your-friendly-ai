@@ -363,34 +363,14 @@ export default function SwapCard({
           title: "SWAP CONFIRMED",
           subtitle: "PROTOCOL VERIFICATION COMPLETE",
           rows: [
+            { label: "BASE POINTS", value: dailyUsed >= DAILY_CAP ? "+0 PTS (DAILY CAP)" : "+5 PTS" },
             { label: "SENT", value: `${fromAmount} ${ti}` },
             { label: "RECEIVED", value: `${toAmount} ${to}` },
             { label: "ROUTER", value: ROUTERS[rKey].label || "LitDEX" },
           ],
         });
         refreshPoints();
-        awardActivity({ wallet: walletAddress, action: "swap", txHash: hash }).then((r) => {
-          if (!r) return;
-          if (r.capped) {
-            showSuccess({
-              title: "DAILY CAP REACHED",
-              subtitle: "MAX 100 SWAP POINTS PER DAY",
-              rows: [
-                { label: "POINTS", value: "+0 PTS (CAP REACHED)" },
-                { label: "RESETS", value: "00:00 IST" },
-              ],
-            });
-          } else if (r.credited > 0) {
-            showSuccess({
-              title: `+${r.credited} POINTS`,
-              subtitle: "SWAP REWARD CREDITED",
-              rows: [
-                { label: "POINTS", value: `+${r.credited} PTS` },
-                { label: "TODAY", value: `${Math.min(100, dailyUsed + r.credited)}/100` },
-              ],
-            });
-          }
-        });
+        awardActivity({ wallet: walletAddress, action: "swap", txHash: hash });
       } else {
         if (subMode === "add" || (subMode === "remove" && poolAction === "add")) {
           const rKey = "liteswap";
@@ -419,19 +399,13 @@ export default function SwapCard({
             title: "LIQUIDITY ADDED",
             subtitle: "PROTOCOL VERIFICATION COMPLETE",
             rows: [
+              { label: "BASE POINTS", value: dailyUsed >= DAILY_CAP ? "+0 PTS (DAILY CAP)" : "+5 PTS" },
               { label: "PAIR", value: `${ta} / ${tb}` },
               { label: "STATUS", value: "POOL UPDATED" },
             ],
           });
           refreshPoints();
-          awardActivity({ wallet: walletAddress, action: "pool", txHash: hash }).then((r) => {
-            if (!r) return;
-            if (r.capped) {
-              showSuccess({ title: "DAILY CAP REACHED", subtitle: "MAX 100 POOL POINTS PER DAY", rows: [{ label: "POINTS", value: "+0 PTS (CAP REACHED)" }, { label: "RESETS", value: "00:00 IST" }] });
-            } else if (r.credited > 0) {
-              showSuccess({ title: `+${r.credited} POINTS`, subtitle: "LIQUIDITY REWARD CREDITED", rows: [{ label: "POINTS", value: `+${r.credited} PTS` }, { label: "TODAY", value: `${Math.min(100, dailyUsed + r.credited)}/100` }] });
-            }
-          });
+          awardActivity({ wallet: walletAddress, action: "pool", txHash: hash });
           fetchPositions();
         } else {
           if (!selectedLp) {
@@ -461,19 +435,13 @@ export default function SwapCard({
             title: "LIQUIDITY REMOVED",
             subtitle: "PROTOCOL VERIFICATION COMPLETE",
             rows: [
+              { label: "BASE POINTS", value: dailyUsed >= DAILY_CAP ? "+0 PTS (DAILY CAP)" : "+5 PTS" },
               { label: "PAIR", value: `${ta} / ${tb}` },
               { label: "STATUS", value: "POSITION CLOSED" }
             ],
           });
           refreshPoints();
-          awardActivity({ wallet: walletAddress, action: "pool", txHash: hash }).then((r) => {
-            if (!r) return;
-            if (r.capped) {
-              showSuccess({ title: "DAILY CAP REACHED", subtitle: "MAX 100 POOL POINTS PER DAY", rows: [{ label: "POINTS", value: "+0 PTS (CAP REACHED)" }, { label: "RESETS", value: "00:00 IST" }] });
-            } else if (r.credited > 0) {
-              showSuccess({ title: `+${r.credited} POINTS`, subtitle: "LIQUIDITY REWARD CREDITED", rows: [{ label: "POINTS", value: `+${r.credited} PTS` }, { label: "TODAY", value: `${Math.min(100, dailyUsed + r.credited)}/100` }] });
-            }
-          });
+          awardActivity({ wallet: walletAddress, action: "pool", txHash: hash });
           fetchPositions();
           setSelectedLp(null);
         }
@@ -518,6 +486,14 @@ export default function SwapCard({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {isConnected && (
+            <span
+              title={`${mode === "pool" ? "Pool" : "Swap"} points today (+5 each, resets daily)`}
+              className="italic text-[11px] font-medium text-white/70 tabular-nums px-2.5 py-1 rounded-full border border-white/10 bg-white/5"
+            >
+              {Math.min(dailyUsed, DAILY_CAP)}/{DAILY_CAP}
+            </span>
+          )}
           {mode === "pool" && (
             <div className="flex bg-brand-surface-2 rounded-lg p-1 border border-brand-border mr-2">
               <button
@@ -1046,11 +1022,6 @@ export default function SwapCard({
           )}
         </div>
         <div className="flex flex-col items-end gap-1">
-          {isConnected && (
-            <span className="text-white opacity-70">
-              {mode === "pool" ? "Pool" : "Swap"} points today {Math.min(dailyUsed, DAILY_CAP)}/{DAILY_CAP}
-            </span>
-          )}
           <span>Real-time quotes</span>
         </div>
       </footer>

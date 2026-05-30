@@ -1368,6 +1368,37 @@ const DeployPage = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [totalDeployed, setTotalDeployed] = useState<number | null>(null);
 
+  // Combined daily deploy points: on-chain ERC20 (max 100) + off-chain
+  // NFT/Staking/Vesting/Factory (max 400) = out of 500.
+  const DEPLOY_CAP = 500;
+  const [deployUsed, setDeployUsed] = useState<number>(0);
+  const fetchDeployCounts = React.useCallback(async () => {
+    if (!address) { setDeployUsed(0); return; }
+    let erc20 = 0, offchain = 0;
+    try {
+      const p = await readPoints(address);
+      erc20 = Number(p.deployDaily);
+    } catch { /* ignore */ }
+    try {
+      const r = await fetch(`https://api.test-hub.xyz/activity/counts/${address.toLowerCase()}`);
+      if (r.ok) {
+        const d = await r.json();
+        offchain = Number(d?.deploy?.used ?? 0);
+      }
+    } catch { /* ignore */ }
+    setDeployUsed(erc20 + offchain);
+  }, [address]);
+  useEffect(() => {
+    fetchDeployCounts();
+    const h = () => fetchDeployCounts();
+    window.addEventListener("litdex:activity-refresh", h);
+    window.addEventListener("litdex:points-refresh", h);
+    return () => {
+      window.removeEventListener("litdex:activity-refresh", h);
+      window.removeEventListener("litdex:points-refresh", h);
+    };
+  }, [fetchDeployCounts]);
+
   const types = [
     { id: 'erc20', name: 'ERC20 Token', icon: Coins },
     { id: 'nft', name: 'NFT (ERC721)', icon: ImageIcon },
@@ -1443,7 +1474,15 @@ const DeployPage = () => {
         </Card>
       </div>
 
-      <div className="flex flex-wrap justify-center gap-2 mb-12">
+      <div className="flex flex-wrap items-center justify-center gap-2 mb-12">
+        {isConnected && (
+          <span
+            title="Daily deploy points (+5 each, resets daily)"
+            className="italic text-[11px] font-medium text-white/70 tabular-nums px-3 py-1.5 rounded-full border border-white/10 bg-white/5 mr-1"
+          >
+            {Math.min(deployUsed, DEPLOY_CAP)}/{DEPLOY_CAP}
+          </span>
+        )}
         {types.map((t) => (
           <button
             key={t.id}

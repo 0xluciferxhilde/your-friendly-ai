@@ -244,7 +244,8 @@ const SwapPage = () => {
                 <img
                   src="https://raw.githubusercontent.com/sachinsahani-cloud/hello-friend/main/public/coins/logo.png"
                   alt="BetsOnBlock"
-                  className="w-11 h-11 rounded-full flex-shrink-0"
+                  style={{ width: 44, height: 44, objectFit: "contain", background: "transparent" }}
+                  className="flex-shrink-0"
                 />
                 <div className="flex-1 min-w-0">
                   <div className="text-white font-bold text-sm">BetsOnBlock</div>
@@ -3670,22 +3671,7 @@ const QuestsPage = () => {
         <div className="p-12 text-center text-brand-text-muted text-xs uppercase tracking-widest">Loading tasks…</div>
       )}
 
-      {groups.map(group => {
-        const items = tasks.filter(group.filter);
-        if (!items.length) return null;
-        return (
-          <div key={group.key} className="mb-10">
-            <div className="flex items-end justify-between mb-4">
-              <h2 className="text-lg font-bold text-white tracking-tight">{group.title}</h2>
-            </div>
-            <div className="space-y-3">
-              {items.map(t => group.key === 'quote' ? renderQuoteCard(t) : renderDirectClaimCard(t, group.title))}
-            </div>
-          </div>
-        );
-      })}
-
-      {/* Partner Tasks */}
+      {/* Partner Tasks - pinned to top */}
       {isConnected && (
         <div className="mb-10">
           <h2 className="text-lg font-bold text-white tracking-tight mb-4">Partners</h2>
@@ -3697,7 +3683,8 @@ const QuestsPage = () => {
               <img
                 src="https://raw.githubusercontent.com/sachinsahani-cloud/hello-friend/main/public/coins/logo.png"
                 alt="BetsOnBlock"
-                className="w-12 h-12 rounded-xl shrink-0 border border-orange-500/40"
+                style={{ width: 48, height: 48, objectFit: "contain", borderRadius: 8 }}
+                className="shrink-0"
               />
               <div className="min-w-0 flex-1">
                 <h3 className="font-semibold text-white truncate">Bet 100 Times on BetsOnBlock</h3>
@@ -3752,6 +3739,21 @@ const QuestsPage = () => {
           </Card>
         </div>
       )}
+
+      {groups.map(group => {
+        const items = tasks.filter(group.filter);
+        if (!items.length) return null;
+        return (
+          <div key={group.key} className="mb-10">
+            <div className="flex items-end justify-between mb-4">
+              <h2 className="text-lg font-bold text-white tracking-tight">{group.title}</h2>
+            </div>
+            <div className="space-y-3">
+              {items.map(t => group.key === 'quote' ? renderQuoteCard(t) : renderDirectClaimCard(t, group.title))}
+            </div>
+          </div>
+        );
+      })}
 
       {/* Content Rewards Section */}
       {isConnected && (

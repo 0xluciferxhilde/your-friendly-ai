@@ -94,13 +94,13 @@ export const LITVM_FACTORY_ADDRESS   = "0xdd56517bFfDf6915918DbEDf1124b5F21D26f6
 // ── Points / Check-in / NFT ─────────────────────────────────────────────
 export const POINTS_SYSTEM_ADDRESS  = "0x526B0629C81d3314929dB8166372F792F3da3419";
 export const DAILY_CHECKIN_ADDRESS  = "0xDdE6F0ee964A9fdF71CDB2cBDF1e5E44263d3825";
-export const LITDEX_NFT_ADDRESS     = "0x59df2d661eb6F5fb97a694E1D2e4D17e2A7b7D15";
 export const MESSENGER_CONTRACT     = "0x9624FBBD6931b9D75961994E13604c1DC2c56225";
-export const NFT_POINTS_ADDRESS      = "0x59df2d661eb6F5fb97a694E1D2e4D17e2A7b7D15";
+export const LITDEX_NFT_ADDRESS     = "0xc3F2901e1fEBC0D4CC8d0e04E001D0D26E35182e";
+export const NFT_POINTS_ADDRESS      = "0xc3F2901e1fEBC0D4CC8d0e04E001D0D26E35182e";
 
 // ── Reward / utility tokens ─────────────────────────────────────────────
 export const LDEX_TOKEN_ADDRESS = "0xBAaba603e6298fbb76325a6B0d47Cd57154ca641";
-export const USDC_TOKEN_ADDRESS = "0x60DD65bAd8a73Dfd8DF029C4e3b372d575B03BC2";
+export const USDC_TOKEN_ADDRESS = "0xFC43ABE529CDC61B7F0aa2e677451AFd83d2B304";
 
 // ── Misc constants ──────────────────────────────────────────────────────
 export const POINTS_OWNER_ADDRESS = "0x3BC6348E1E569E97Bd8247b093475A4aC22B9fD4";
@@ -861,9 +861,9 @@ export type NFTInfo = { nftType: number; lastClaimDay: bigint };
 export const NFT_MAX_SUPPLY: Record<NftTierId, number> = { 1: 9999, 2: 4999, 3: 999 };
 
 export const NFT_TIERS = [
-  { id: 1 as const, name: "LitShard", cost: 1000,  rewards: { zkltc: "0.0001", usdc: "10",  ldex: "2"  }, maxSupply: 9999 },
-  { id: 2 as const, name: "LitCore",  cost: 5000,  rewards: { zkltc: "0.0005", usdc: "50",  ldex: "10" }, maxSupply: 4999 },
-  { id: 3 as const, name: "LitGod",   cost: 10000, rewards: { zkltc: "0.001",  usdc: "100", ldex: "20" }, maxSupply: 999  },
+  { id: 1 as const, name: "LitShard", cost: 1000,  rewards: { zkltc: "0.0001", usdc: "2",  ldex: "2"  }, maxSupply: 9999 },
+  { id: 2 as const, name: "LitCore",  cost: 5000,  rewards: { zkltc: "0.0005", usdc: "5",  ldex: "10" }, maxSupply: 4999 },
+  { id: 3 as const, name: "LitGod",   cost: 10000, rewards: { zkltc: "0.001",  usdc: "10", ldex: "20" }, maxSupply: 999  },
 ];
 
 export async function mintRewardNFT(nftType: NftTierId): Promise<string> {

@@ -1000,9 +1000,9 @@ const StackIcon = ({ tier }: { tier: NFTTier }) => {
 };
 
 const NFT_TIER_META = [
-  { nftType: 1 as const, name: "LitShard", rarity: "COMMON", tier: "common" as NFTTier, label: "LS", color: "#888888", cost: 1000,  maxSupply: 9999, rewards: "0.0001 zkLTC + 10 USDC + 2 LDEX" },
-  { nftType: 2 as const, name: "LitCore",  rarity: "RARE",   tier: "rare"   as NFTTier, label: "LC", color: "#F97316", cost: 5000,  maxSupply: 4999, rewards: "0.0005 zkLTC + 50 USDC + 10 LDEX" },
-  { nftType: 3 as const, name: "LitGod",   rarity: "EPIC",   tier: "epic"   as NFTTier, label: "LG", color: "#a855f7", cost: 10000, maxSupply: 999,  rewards: "0.001 zkLTC + 100 USDC + 20 LDEX" },
+  { nftType: 1 as const, name: "LitShard", rarity: "COMMON", tier: "common" as NFTTier, label: "LS", color: "#888888", cost: 1000,  maxSupply: 9999, rewards: "0.0001 zkLTC + 2 LDEX + 2 USDC" },
+  { nftType: 2 as const, name: "LitCore",  rarity: "RARE",   tier: "rare"   as NFTTier, label: "LC", color: "#F97316", cost: 5000,  maxSupply: 4999, rewards: "0.0005 zkLTC + 10 LDEX + 5 USDC" },
+  { nftType: 3 as const, name: "LitGod",   rarity: "EPIC",   tier: "epic"   as NFTTier, label: "LG", color: "#a855f7", cost: 10000, maxSupply: 999,  rewards: "0.001 zkLTC + 20 LDEX + 10 USDC" },
 ];
 
 // --- Page: NFTs ---
@@ -1196,9 +1196,9 @@ const NFTsPage = () => {
     const tier = NFT_TIER_META.find(t => t.nftType === nftType);
     if (!tier) return "";
     const base = {
-      1: { zkltc: 0.0001, usdc: 10, ldex: 2 },
-      2: { zkltc: 0.0005, usdc: 50, ldex: 10 },
-      3: { zkltc: 0.001, usdc: 100, ldex: 20 }
+      1: { zkltc: 0.0001, usdc: 2, ldex: 2 },
+      2: { zkltc: 0.0005, usdc: 5, ldex: 10 },
+      3: { zkltc: 0.001, usdc: 10, ldex: 20 }
     }[nftType as 1|2|3];
     
     if (!base) return tier.rewards;

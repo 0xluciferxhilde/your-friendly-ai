@@ -829,12 +829,6 @@ const CheckinPage = () => {
               <div className="text-2xl font-black text-white tracking-tighter leading-none">
                 {nextRewardLdex} <span className="text-[10px] text-white/70 font-bold uppercase ml-1.5 tracking-tighter">LDEX</span>
               </div>
-              {nextRewardHasZkltc && (
-                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/5 w-full">
-                  <Sparkles size={10} className="text-white/20" />
-                  <span className="text-[7px] font-bold text-white/40 uppercase tracking-[0.1em]">+ 0.01 zkLTC STREAK BONUS 🎁</span>
-                </div>
-              )}
             </div>
           </div>
         )}

@@ -2221,6 +2221,8 @@ contract MNFT is ERC721, Ownable {
                 helper="Max 32 characters"
                 value={name} 
                 onChange={setName} 
+                sanitize={sanitizeAlphaNum}
+                maxLength={32}
               />
               <InputField 
                 label="Symbol" 
@@ -2228,6 +2230,8 @@ contract MNFT is ERC721, Ownable {
                 helper="Short identifier (3-5 chars)"
                 value={symbol} 
                 onChange={setSymbol} 
+                sanitize={sanitizeAlphaNum}
+                maxLength={8}
               />
               <InputField 
                 label="Max Supply" 
@@ -2235,6 +2239,7 @@ contract MNFT is ERC721, Ownable {
                 helper="Maximum NFTs that can ever exist"
                 value={maxSupply} 
                 onChange={setMaxSupply} 
+                sanitize={sanitizeInteger}
               />
               <InputField 
                 label="Mint Price (zkLTC)" 
@@ -2242,12 +2247,14 @@ contract MNFT is ERC721, Ownable {
                 helper="Price per NFT mint"
                 value={mintPrice} 
                 onChange={setMintPrice} 
+                sanitize={sanitizePrice1}
               />
             </div>
             <div className="flex justify-end pt-4">
               <button 
                 onClick={() => setStep('features')}
-                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest"
+                disabled={!name || !symbol || !maxSupply || !mintPrice}
+                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Next <ArrowLeftRight size={14} className="rotate-180" />
               </button>
@@ -2268,6 +2275,7 @@ contract MNFT is ERC721, Ownable {
                 helper="Metadata folder — token URls become {baseURI}{tokenId}.json"
                 value={baseURI} 
                 onChange={setBaseURI} 
+                error={baseURI && !isValidUrl(baseURI) ? "Must start with https:// or ipfs://" : undefined}
               />
               <InputField 
                 label="Max Per Wallet" 
@@ -2275,6 +2283,7 @@ contract MNFT is ERC721, Ownable {
                 helper="Anti-whale limit per address"
                 value={maxPerWallet} 
                 onChange={setMaxPerWallet} 
+                sanitize={sanitizeInteger}
               />
             </div>
             <div className="flex justify-between pt-4">
@@ -2286,7 +2295,8 @@ contract MNFT is ERC721, Ownable {
               </button>
               <button 
                 onClick={() => setStep('review')}
-                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest"
+                disabled={!baseURI || !isValidUrl(baseURI) || !maxPerWallet}
+                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Next <ArrowLeftRight size={14} className="rotate-180" />
               </button>

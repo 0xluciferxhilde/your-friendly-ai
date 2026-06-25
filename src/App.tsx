@@ -668,7 +668,7 @@ const CheckinPage = () => {
   const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
-  const [successMsg, setSuccessMsg] = useState<{ ldex: string, pts: number, zkLTC?: string, hash?: string } | null>(null);
+  const [successMsg, setSuccessMsg] = useState<{ ldex: string, pts: number, hash?: string } | null>(null);
   const [checkinError, setCheckinError] = useState<string | null>(null);
 
   const fetchData = async () => {
@@ -709,23 +709,10 @@ const CheckinPage = () => {
       const newInfo = await readCheckinInfo(address);
       
       const ldexVal = formatEther(newInfo.nextLDEX);
-      
-      let zkLTCBonus = "";
-      const now = new Date();
-      const istDate = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
-      if (istDate.getUTCDay() === 0) {
-        const dayOfMonth = istDate.getUTCDate();
-        const week = Math.ceil(dayOfMonth / 7);
-        if (week === 1) zkLTCBonus = "0.001";
-        else if (week === 2) zkLTCBonus = "0.05";
-        else if (week === 3) zkLTCBonus = "0.01";
-        else if (week === 4) zkLTCBonus = "0.01";
-      }
 
       setSuccessMsg({ 
         ldex: ldexVal, 
         pts: 10,
-        zkLTC: zkLTCBonus || undefined,
         hash
       });
 
@@ -733,7 +720,6 @@ const CheckinPage = () => {
         { label: "BASE POINTS", value: "+10 PTS" },
         { label: "INCENTIVE YIELD", value: `+${Number(ldexVal).toLocaleString()} LDEX` },
       ];
-      if (zkLTCBonus) rows.push({ label: "STREAK BONUS", value: `+${zkLTCBonus} zkLTC 🎁` });
       rows.push({ label: "STREAK", value: `Day ${Number(newInfo.streak)}` });
       showSuccess({
         title: "MISSION SUCCESS",
@@ -789,7 +775,6 @@ const CheckinPage = () => {
   const nextDayInCycle = (streak % 7) + 1;
   const ldexRewards = [10, 15, 20, 25, 30, 35, 40];
   const nextRewardLdex = ldexRewards[nextDayInCycle - 1];
-  const nextRewardHasZkltc = nextDayInCycle === 1 || nextDayInCycle === 7;
 
   // Calendar logic
   const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -844,12 +829,6 @@ const CheckinPage = () => {
               <div className="text-2xl font-black text-white tracking-tighter leading-none">
                 {nextRewardLdex} <span className="text-[10px] text-white/70 font-bold uppercase ml-1.5 tracking-tighter">LDEX</span>
               </div>
-              {nextRewardHasZkltc && (
-                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/5 w-full">
-                  <Sparkles size={10} className="text-white/20" />
-                  <span className="text-[7px] font-bold text-white/40 uppercase tracking-[0.1em]">+ 0.01 zkLTC STREAK BONUS 🎁</span>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -950,15 +929,7 @@ const CheckinPage = () => {
                 <Trophy size={12} />
               </div>
               <p className="text-[7px] uppercase font-bold tracking-widest leading-tight">
-                Yield Mission: +10 Pts (Fixed) & scaling LDEX yield per streak day (10→15→20→25→30→35→40 LDEX).
-              </p>
-           </div>
-           <div className="flex items-start gap-2">
-              <div className="w-6 h-6 rounded-md bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                <Sparkles size={12} />
-              </div>
-              <p className="text-[7px] uppercase font-bold tracking-widest leading-tight">
-                Elite Bonus: 0.01 zkLTC on Day 1 & every 7th day streak. Points are separate from daily cap.
+                Yield Mission: Scaling LDEX yield per streak day (10→15→20→25→30→35→40 LDEX).
               </p>
            </div>
         </div>

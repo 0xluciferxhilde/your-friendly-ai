@@ -929,15 +929,7 @@ const CheckinPage = () => {
                 <Trophy size={12} />
               </div>
               <p className="text-[7px] uppercase font-bold tracking-widest leading-tight">
-                Yield Mission: +10 Pts (Fixed) & scaling LDEX yield per streak day (10→15→20→25→30→35→40 LDEX).
-              </p>
-           </div>
-           <div className="flex items-start gap-2">
-              <div className="w-6 h-6 rounded-md bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                <Sparkles size={12} />
-              </div>
-              <p className="text-[7px] uppercase font-bold tracking-widest leading-tight">
-                Elite Bonus: 0.01 zkLTC on Day 1 & every 7th day streak. Points are separate from daily cap.
+                Yield Mission: Scaling LDEX yield per streak day (10→15→20→25→30→35→40 LDEX).
               </p>
            </div>
         </div>

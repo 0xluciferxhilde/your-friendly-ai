@@ -2704,6 +2704,13 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
         deployFee={fee}
         actionLabel="Deploy"
         onPreviewSource={() => setShowSource(!showSource)}
+        disabled={
+          !isValidAddress(stakingToken) ||
+          (rewardToken !== '' && !isValidAddress(rewardToken)) ||
+          !rewardRate ||
+          !lockPeriod || Number(lockPeriod) < 1 ||
+          !label
+        }
       >
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2712,6 +2719,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
               placeholder="0x... ERC20 to stake" 
               value={stakingToken} 
               onChange={setStakingToken} 
+              error={stakingToken && !isValidAddress(stakingToken) ? "Invalid address" : undefined}
             />
             <InputField 
               label="Reward Token Address" 
@@ -2719,6 +2727,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
               helper="Leave blank to use same token as reward"
               value={rewardToken} 
               onChange={setRewardToken} 
+              error={rewardToken && !isValidAddress(rewardToken) ? "Invalid address" : undefined}
             />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2728,6 +2737,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
               helper="Converted to per-day rate x 1e18 on-chain"
               value={rewardRate} 
               onChange={setRewardRate} 
+              sanitize={sanitizeDecimal}
             />
             <InputField 
               label="Lock Period (days)" 
@@ -2735,6 +2745,8 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
               helper="Minimum staking duration"
               value={lockPeriod} 
               onChange={setLockPeriod} 
+              sanitize={sanitizeInteger}
+              error={lockPeriod !== '' && Number(lockPeriod) < 1 ? "Minimum 1 day" : undefined}
             />
           </div>
           <InputField 
@@ -2743,6 +2755,8 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
             helper="Stored on-chain as the contract's display name"
             value={label} 
             onChange={setLabel} 
+            sanitize={sanitizeAlphaNum}
+            maxLength={10}
           />
         </div>
 

@@ -1579,7 +1579,7 @@ const DeployPage = () => {
 
 // --- Sub-Form Components ---
 
-const FormContainer = ({ title, subtitle, icon: Icon, children, deployFee = "0.05", actionLabel = "Deploy", onAction = () => {}, loading = false, onPreviewSource }: any) => (
+const FormContainer = ({ title, subtitle, icon: Icon, children, deployFee = "0.05", actionLabel = "Deploy", onAction = () => {}, loading = false, onPreviewSource, disabled = false }: any) => (
   <Card className="p-8 bg-black/40 border-white/5 backdrop-blur-3xl shadow-2xl overflow-hidden relative group">
     <div className="absolute top-0 right-0 w-64 h-64 bg-white/[0.02] rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
     <div className="flex items-start gap-5 mb-10">
@@ -1605,7 +1605,7 @@ const FormContainer = ({ title, subtitle, icon: Icon, children, deployFee = "0.0
        )}
        <button 
         onClick={onAction}
-        disabled={loading}
+        disabled={loading || disabled}
         className={cn(
           "flex items-center justify-center gap-2 py-4 bg-white text-black rounded-xl font-bold text-sm hover:opacity-90 transition-all uppercase tracking-widest shadow-[0_0_30px_rgba(255,255,255,0.1)] disabled:opacity-50",
           !onPreviewSource && "md:col-span-2"
@@ -1617,19 +1617,39 @@ const FormContainer = ({ title, subtitle, icon: Icon, children, deployFee = "0.0
   </Card>
 );
 
-const InputField = ({ label, placeholder, helper, type = "text", value = "", onChange = () => {} }: any) => (
+const sanitizeInteger = (v: string) => (v || '').replace(/[^0-9]/g, '');
+const sanitizeAlphaNum = (v: string) => (v || '').replace(/[^a-zA-Z0-9]/g, '');
+const sanitizeDecimal = (v: string) => {
+  let val = (v || '').replace(/[^0-9.]/g, '');
+  const parts = val.split('.');
+  if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+  return val;
+};
+const sanitizePrice1 = (v: string) => {
+  let val = (v || '').replace(/[^0-9.]/g, '');
+  const parts = val.split('.');
+  if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+  const [a, b] = val.split('.');
+  if (b !== undefined) val = a + '.' + b.slice(0, 1);
+  return val;
+};
+const isValidAddress = (a: string) => /^0x[a-fA-F0-9]{40}$/.test(a || '');
+const isValidUrl = (u: string) => /^(https?:\/\/|ipfs:\/\/)/i.test(u || '');
+
+const InputField = ({ label, placeholder, helper, type = "text", value = "", onChange = () => {}, sanitize, error, maxLength }: any) => (
   <div className="space-y-2">
     <label className="text-[10px] font-bold text-brand-text-muted uppercase tracking-[0.2em]">{label} <span className="text-red-500">*</span></label>
-    <div className="bg-black/30 border border-white/10 rounded-xl p-4 focus-within:border-white/30 transition-all">
+    <div className={cn("bg-black/30 border rounded-xl p-4 focus-within:border-white/30 transition-all", error ? "border-red-500/40" : "border-white/10")}>
       <input 
         type={type} 
         placeholder={placeholder} 
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        maxLength={maxLength}
+        onChange={(e) => onChange(sanitize ? sanitize(e.target.value) : e.target.value)}
         className="w-full bg-transparent outline-none text-white font-medium placeholder:text-white/20" 
       />
     </div>
-    {helper && <p className="text-[10px] text-brand-text-muted italic">{helper}</p>}
+    {error ? <p className="text-[10px] text-red-400 italic">{error}</p> : (helper && <p className="text-[10px] text-brand-text-muted italic">{helper}</p>)}
   </div>
 );
 
@@ -1773,6 +1793,8 @@ const ERC20Form = ({ onDeployed }: any) => {
                 helper="Max 50 characters — appears in wallets"
                 value={name} 
                 onChange={setName} 
+                sanitize={sanitizeAlphaNum}
+                maxLength={50}
               />
               <InputField 
                 label="Token Symbol" 
@@ -1780,6 +1802,8 @@ const ERC20Form = ({ onDeployed }: any) => {
                 helper="e.g. MAT — appears on DEXes"
                 value={symbol} 
                 onChange={setSymbol} 
+                sanitize={sanitizeAlphaNum}
+                maxLength={12}
               />
               <InputField 
                 label="Total Supply" 
@@ -1787,6 +1811,7 @@ const ERC20Form = ({ onDeployed }: any) => {
                 helper="1,000,000 tokens"
                 value={supply} 
                 onChange={setSupply} 
+                sanitize={sanitizeInteger}
               />
               <InputField 
                 label="Decimals" 
@@ -1794,12 +1819,15 @@ const ERC20Form = ({ onDeployed }: any) => {
                 helper="18 decimals is standard for most tokens"
                 value={decimals} 
                 onChange={setDecimals} 
+                sanitize={sanitizeInteger}
+                error={decimals !== '' && Number(decimals) > 18 ? "Must be between 0 and 18" : undefined}
               />
             </div>
             <div className="flex justify-end pt-4">
               <button 
                 onClick={() => setStep('features')}
-                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest"
+                disabled={!name || !symbol || !supply || !decimals || Number(decimals) > 18}
+                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Next <ArrowLeftRight size={14} className="rotate-180" />
               </button>
@@ -2193,6 +2221,8 @@ contract MNFT is ERC721, Ownable {
                 helper="Max 32 characters"
                 value={name} 
                 onChange={setName} 
+                sanitize={sanitizeAlphaNum}
+                maxLength={32}
               />
               <InputField 
                 label="Symbol" 
@@ -2200,6 +2230,8 @@ contract MNFT is ERC721, Ownable {
                 helper="Short identifier (3-5 chars)"
                 value={symbol} 
                 onChange={setSymbol} 
+                sanitize={sanitizeAlphaNum}
+                maxLength={8}
               />
               <InputField 
                 label="Max Supply" 
@@ -2207,6 +2239,7 @@ contract MNFT is ERC721, Ownable {
                 helper="Maximum NFTs that can ever exist"
                 value={maxSupply} 
                 onChange={setMaxSupply} 
+                sanitize={sanitizeInteger}
               />
               <InputField 
                 label="Mint Price (zkLTC)" 
@@ -2214,12 +2247,14 @@ contract MNFT is ERC721, Ownable {
                 helper="Price per NFT mint"
                 value={mintPrice} 
                 onChange={setMintPrice} 
+                sanitize={sanitizePrice1}
               />
             </div>
             <div className="flex justify-end pt-4">
               <button 
                 onClick={() => setStep('features')}
-                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest"
+                disabled={!name || !symbol || !maxSupply || !mintPrice}
+                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Next <ArrowLeftRight size={14} className="rotate-180" />
               </button>
@@ -2240,6 +2275,7 @@ contract MNFT is ERC721, Ownable {
                 helper="Metadata folder — token URls become {baseURI}{tokenId}.json"
                 value={baseURI} 
                 onChange={setBaseURI} 
+                error={baseURI && !isValidUrl(baseURI) ? "Must start with https:// or ipfs://" : undefined}
               />
               <InputField 
                 label="Max Per Wallet" 
@@ -2247,6 +2283,7 @@ contract MNFT is ERC721, Ownable {
                 helper="Anti-whale limit per address"
                 value={maxPerWallet} 
                 onChange={setMaxPerWallet} 
+                sanitize={sanitizeInteger}
               />
             </div>
             <div className="flex justify-between pt-4">
@@ -2258,7 +2295,8 @@ contract MNFT is ERC721, Ownable {
               </button>
               <button 
                 onClick={() => setStep('review')}
-                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest"
+                disabled={!baseURI || !isValidUrl(baseURI) || !maxPerWallet}
+                className="flex items-center gap-2 px-8 py-4 bg-brand-surface-2 border border-white/5 rounded-xl text-white font-bold hover:bg-white/10 transition-all uppercase text-xs tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Next <ArrowLeftRight size={14} className="rotate-180" />
               </button>
@@ -2326,7 +2364,7 @@ contract MNFT is ERC721, Ownable {
 
             <button 
               onClick={handleDeploy}
-              disabled={loading}
+              disabled={loading || !name || !symbol || !maxSupply || !mintPrice || !baseURI || !isValidUrl(baseURI) || !maxPerWallet}
               className="w-full py-5 bg-white text-black rounded-2xl font-bold text-base hover:bg-white/90 transition-all shadow-[0_0_40px_rgba(255,255,255,0.1)] flex items-center justify-center gap-3 disabled:opacity-50"
             >
               <Rocket size={20} /> {loading ? "Deploying..." : "Deploy Collection"}
@@ -2666,6 +2704,13 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
         deployFee={fee}
         actionLabel="Deploy"
         onPreviewSource={() => setShowSource(!showSource)}
+        disabled={
+          !isValidAddress(stakingToken) ||
+          (rewardToken !== '' && !isValidAddress(rewardToken)) ||
+          !rewardRate ||
+          !lockPeriod || Number(lockPeriod) < 1 ||
+          !label
+        }
       >
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2674,6 +2719,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
               placeholder="0x... ERC20 to stake" 
               value={stakingToken} 
               onChange={setStakingToken} 
+              error={stakingToken && !isValidAddress(stakingToken) ? "Invalid address" : undefined}
             />
             <InputField 
               label="Reward Token Address" 
@@ -2681,6 +2727,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
               helper="Leave blank to use same token as reward"
               value={rewardToken} 
               onChange={setRewardToken} 
+              error={rewardToken && !isValidAddress(rewardToken) ? "Invalid address" : undefined}
             />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2690,6 +2737,7 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
               helper="Converted to per-day rate x 1e18 on-chain"
               value={rewardRate} 
               onChange={setRewardRate} 
+              sanitize={sanitizeDecimal}
             />
             <InputField 
               label="Lock Period (days)" 
@@ -2697,6 +2745,8 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
               helper="Minimum staking duration"
               value={lockPeriod} 
               onChange={setLockPeriod} 
+              sanitize={sanitizeInteger}
+              error={lockPeriod !== '' && Number(lockPeriod) < 1 ? "Minimum 1 day" : undefined}
             />
           </div>
           <InputField 
@@ -2705,6 +2755,8 @@ contract ldex is Ownable, ReentrancyGuard, Pausable {
             helper="Stored on-chain as the contract's display name"
             value={label} 
             onChange={setLabel} 
+            sanitize={sanitizeAlphaNum}
+            maxLength={10}
           />
         </div>
 
@@ -2913,6 +2965,11 @@ contract ${label.replace(/\s+/g, '') || "TokenVesting"} is Ownable, ReentrancyGu
         deployFee={fee}
         actionLabel="Deploy"
         onPreviewSource={() => setShowSource(!showSource)}
+        disabled={
+          !isValidAddress(tokenAddress) ||
+          !isValidAddress(beneficiary) ||
+          !amount || !cliffDays || !vestingDays
+        }
       >
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2921,6 +2978,7 @@ contract ${label.replace(/\s+/g, '') || "TokenVesting"} is Ownable, ReentrancyGu
               placeholder="0x... token to vest" 
               value={tokenAddress} 
               onChange={setTokenAddress} 
+              error={tokenAddress && !isValidAddress(tokenAddress) ? "Invalid address" : undefined}
             />
             <InputField 
               label="Vesting Label" 
@@ -2935,6 +2993,7 @@ contract ${label.replace(/\s+/g, '') || "TokenVesting"} is Ownable, ReentrancyGu
               placeholder="0x..." 
               value={beneficiary} 
               onChange={setBeneficiary} 
+              error={beneficiary && !isValidAddress(beneficiary) ? "Invalid address" : undefined}
             />
             <InputField 
               label="Total Amount (whole units) *" 
@@ -2942,6 +3001,7 @@ contract ${label.replace(/\s+/g, '') || "TokenVesting"} is Ownable, ReentrancyGu
               helper="Total supply to be vested"
               value={amount} 
               onChange={setAmount} 
+              sanitize={sanitizeInteger}
             />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2951,12 +3011,14 @@ contract ${label.replace(/\s+/g, '') || "TokenVesting"} is Ownable, ReentrancyGu
               helper="No tokens released before cliff ends"
               value={cliffDays} 
               onChange={setCliffDays} 
+              sanitize={sanitizeInteger}
             />
             <InputField 
               label="Vesting Duration (days after cliff)" 
               placeholder="365" 
               value={vestingDays} 
               onChange={setVestingDays} 
+              sanitize={sanitizeInteger}
             />
           </div>
 
@@ -3203,15 +3265,18 @@ contract LitVMTokenFactory is Ownable {
         deployFee={fee}
         actionLabel="Deploy"
         onPreviewSource={() => setShowSource(!showSource)}
+        disabled={
+          !name || !symbol || !supply || !decimals || Number(decimals) > 18
+        }
       >
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <InputField label="Token Name *" placeholder="e.g. My Token" value={name} onChange={setName} />
-            <InputField label="Token Symbol *" placeholder="e.g. MTK" value={symbol} onChange={setSymbol} />
+            <InputField label="Token Name *" placeholder="e.g. My Token" value={name} onChange={setName} sanitize={sanitizeAlphaNum} maxLength={50} />
+            <InputField label="Token Symbol *" placeholder="e.g. MTK" value={symbol} onChange={setSymbol} sanitize={sanitizeAlphaNum} maxLength={12} />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <InputField label="Decimals" placeholder="18" value={decimals} onChange={setDecimals} />
-            <InputField label="Total Supply *" placeholder="e.g. 1000000" value={supply} onChange={setSupply} />
+            <InputField label="Decimals" placeholder="18" value={decimals} onChange={setDecimals} sanitize={sanitizeInteger} error={decimals !== '' && Number(decimals) > 18 ? "Must be between 0 and 18" : undefined} />
+            <InputField label="Total Supply *" placeholder="e.g. 1000000" value={supply} onChange={setSupply} sanitize={sanitizeInteger} />
           </div>
           
           <div className="pt-4 border-t border-white/5 space-y-4">

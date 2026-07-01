@@ -1694,7 +1694,8 @@ const ERC20Form = ({ onDeployed }: any) => {
       const result = await deployTokenLitDeX({
         name,
         symbol,
-        totalSupply: supply
+        totalSupply: supply,
+        decimals: parseInt(decimals) || 18
       });
 
       setTxHash(result.txHash);
